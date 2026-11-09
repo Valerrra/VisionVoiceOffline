@@ -34,11 +34,19 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvTitle: TextView
     private lateinit var tvModelInfo: TextView
+    private lateinit var btnModeToggle: Button
     private lateinit var tvStatusBadge: TextView
     private lateinit var tvRecognizedText: TextView
     private lateinit var tvAudioMeter: TextView
     private lateinit var tvKeyIndicator: TextView
 
+    // Command Router UI views
+    private lateinit var tvCommandIntent: TextView
+    private lateinit var tvCommandStatus: TextView
+    private lateinit var tvCommandParams: TextView
+    private lateinit var tvCommandExecTime: TextView
+
+    // Metrics views
     private lateinit var tvMetricLatency: TextView
     private lateinit var tvMetricRtf: TextView
     private lateinit var tvMetricDuration: TextView
@@ -46,21 +54,31 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvMetricRam: TextView
     private lateinit var tvMetricCpu: TextView
 
+    // Control buttons
     private lateinit var btnHoldRecord: Button
     private lateinit var btnClear: Button
     private lateinit var btnTestWav0: Button
     private lateinit var btnTestWav1: Button
     private lateinit var btnNextPhrase: Button
 
+    // Quick Simulation buttons
+    private lateinit var btnQuickSettings: Button
+    private lateinit var btnQuickYoutube: Button
+    private lateinit var btnQuickVolUp: Button
+    private lateinit var btnQuickMute: Button
+
+    // 10 phrases card
     private lateinit var tvPhraseCategory: TextView
     private lateinit var tvPhrasePrompt: TextView
     private lateinit var tvPhraseHelp: TextView
 
+    // Diagnostic log
     private lateinit var tvLog: TextView
     private lateinit var scrollLog: ScrollView
 
     private lateinit var sttEngine: SttEngine
     private lateinit var audioCapture: RemoteAudioCapture
+    private lateinit var commandRouter: CommandRouter
 
     @Volatile
     private var isVoiceActive = false
@@ -99,10 +117,16 @@ class MainActivity : AppCompatActivity() {
     private fun initViews() {
         tvTitle = findViewById(R.id.tvTitle)
         tvModelInfo = findViewById(R.id.tvModelInfo)
+        btnModeToggle = findViewById(R.id.btnModeToggle)
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
         tvRecognizedText = findViewById(R.id.tvRecognizedText)
         tvAudioMeter = findViewById(R.id.tvAudioMeter)
         tvKeyIndicator = findViewById(R.id.tvKeyIndicator)
+
+        tvCommandIntent = findViewById(R.id.tvCommandIntent)
+        tvCommandStatus = findViewById(R.id.tvCommandStatus)
+        tvCommandParams = findViewById(R.id.tvCommandParams)
+        tvCommandExecTime = findViewById(R.id.tvCommandExecTime)
 
         tvMetricLatency = findViewById(R.id.tvMetricLatency)
         tvMetricRtf = findViewById(R.id.tvMetricRtf)
@@ -117,6 +141,11 @@ class MainActivity : AppCompatActivity() {
         btnTestWav1 = findViewById(R.id.btnTestWav1)
         btnNextPhrase = findViewById(R.id.btnNextPhrase)
 
+        btnQuickSettings = findViewById(R.id.btnQuickSettings)
+        btnQuickYoutube = findViewById(R.id.btnQuickYoutube)
+        btnQuickVolUp = findViewById(R.id.btnQuickVolUp)
+        btnQuickMute = findViewById(R.id.btnQuickMute)
+
         tvPhraseCategory = findViewById(R.id.tvPhraseCategory)
         tvPhrasePrompt = findViewById(R.id.tvPhrasePrompt)
         tvPhraseHelp = findViewById(R.id.tvPhraseHelp)
@@ -129,6 +158,21 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupButtons() {
+        // Mode toggle: COMMAND vs DICTATION
+        btnModeToggle.setOnClickListener {
+            if (commandRouter.currentMode == OperatingMode.COMMAND) {
+                commandRouter.currentMode = OperatingMode.DICTATION
+                btnModeToggle.text = "РЕЖИМ: ДИКТОВКА (DICTATION)"
+                btnModeToggle.setTextColor(ContextCompat.getColor(this, R.color.text_mono))
+                log("Переключено в режим: ДИКТОВКА (команды не выполняются)")
+            } else {
+                commandRouter.currentMode = OperatingMode.COMMAND
+                btnModeToggle.text = "РЕЖИМ: КОМАНДЫ (COMMAND)"
+                btnModeToggle.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+                log("Переключено в режим: КОМАНДЫ (выполнение активно)")
+            }
+        }
+
         // UI Touch / Click hold support for testing
         btnHoldRecord.setOnTouchListener { _, event ->
             when (event.action) {
@@ -146,6 +190,10 @@ class MainActivity : AppCompatActivity() {
 
         btnClear.setOnClickListener {
             tvRecognizedText.text = "Готов к распознаванию..."
+            tvCommandIntent.text = "Интент: [ожидание голосовой команды]"
+            tvCommandStatus.text = "Результат: —"
+            tvCommandParams.text = "Параметры: —"
+            tvCommandExecTime.text = "Exec: — ms"
             tvMetricLatency.text = "— ms"
             tvMetricRtf.text = "—"
             tvMetricDuration.text = "— ms"
@@ -169,6 +217,27 @@ class MainActivity : AppCompatActivity() {
             updatePhraseCard()
             log("Выбрана фраза ${currentPhraseIndex + 1}/10: ${TestPhrases.items[currentPhraseIndex].phrase}")
         }
+
+        // Quick simulation buttons
+        btnQuickSettings.setOnClickListener {
+            simulateCommand("открой настройки")
+        }
+        btnQuickYoutube.setOnClickListener {
+            simulateCommand("открой ютуб")
+        }
+        btnQuickVolUp.setOnClickListener {
+            simulateCommand("сделай громче")
+        }
+        btnQuickMute.setOnClickListener {
+            simulateCommand("выключи звук")
+        }
+    }
+
+    private fun simulateCommand(phrase: String) {
+        log("Симуляция команды: '$phrase'")
+        tvRecognizedText.text = phrase
+        val result = commandRouter.route(phrase)
+        displayCommandResult(result)
     }
 
     private fun updatePhraseCard() {
@@ -176,12 +245,13 @@ class MainActivity : AppCompatActivity() {
         tvPhraseCategory.text = "Тест ${p.index}/${p.total}: ${p.category}"
         tvPhrasePrompt.text = "«${p.phrase}»"
         tvPhraseHelp.text = "${p.hint} (Зажмите микрофон на пульте)"
-        btnNextPhrase.text = "След. фраза (${p.index}/${p.total})"
+        btnNextPhrase.text = "Фраза (${p.index}/${p.total})"
     }
 
     private fun initServices() {
         audioCapture = RemoteAudioCapture(this)
         sttEngine = SttEngine(this)
+        commandRouter = CommandRouter(this)
 
         log("Инициализация Vosk Zipformer Small RU (INT8)...")
         tvModelInfo.text = "Модель: Загрузка INT8..."
@@ -250,10 +320,7 @@ class MainActivity : AppCompatActivity() {
 
     @Synchronized
     private fun handleVoiceStart(source: String) {
-        if (isVoiceActive) {
-            // Already active; ignore duplicate/repeat key-down events
-            return
-        }
+        if (isVoiceActive) return
 
         if (!sttEngine.isReady) {
             log("Внимание: модель STT еще загружается, ожидайте...")
@@ -277,7 +344,6 @@ class MainActivity : AppCompatActivity() {
 
         val started = audioCapture.startCapture(
             onAudioChunk = { samples, rmsDb, peak ->
-                // Feed to streaming STT engine
                 sttEngine.feedSamples(samples) { partialText ->
                     runOnUiThread {
                         if (isVoiceActive) {
@@ -285,8 +351,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
-
-                // Update audio meter occasionally
                 runOnUiThread {
                     tvAudioMeter.text = "RMS: ${"%.1f".format(rmsDb)} dB | Peak: $peak | Маршрут: back"
                 }
@@ -349,6 +413,12 @@ class MainActivity : AppCompatActivity() {
                 tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
                 tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
 
+                // M4: Execute Voice Command via CommandRouter
+                if (recognized.isNotEmpty() && !recognized.startsWith("(")) {
+                    val cmdResult = commandRouter.route(recognized)
+                    displayCommandResult(cmdResult)
+                }
+
                 val curPhrase = TestPhrases.items[currentPhraseIndex]
                 log("════════════════════════════════════════")
                 log("РЕЗУЛЬТАТ РАСПОЗНАВАНИЯ:")
@@ -359,9 +429,33 @@ class MainActivity : AppCompatActivity() {
                 log("  Decode Duration:      ${metrics.totalDecodeDurationMs} ms")
                 log("  Real-Time Factor:     ${"%.3f".format(metrics.rtf)}")
                 log("  Peak RAM (PSS):       ${"%.1f".format(metrics.peakRamMb)} MB")
-                log("  Process CPU Time:     ${metrics.cpuTimeMs} ms")
                 log("════════════════════════════════════════")
             }
+        }
+    }
+
+    private fun displayCommandResult(result: CommandResult) {
+        val targetDesc = if (result.command.target != null) " (target=${result.command.target})" else ""
+        tvCommandIntent.text = "Интент: ${result.command.type} -> action=${result.command.action}$targetDesc"
+        tvCommandStatus.text = "Результат: ${result.statusMessage}"
+        tvCommandStatus.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (result.success) R.color.accent_green else R.color.accent_red
+            )
+        )
+        tvCommandParams.text = "Параметры: ${result.command.params} | Правило: ${result.command.matchedRule}"
+        tvCommandExecTime.text = "Exec: ${result.executionTimeMs} ms"
+
+        log("КОМАНДНЫЙ РОУТЕР:")
+        log("  Интент:    ${result.command.type} (action=${result.command.action}, target=${result.command.target})")
+        log("  Результат: ${result.statusMessage} [Успех: ${result.success}]")
+        log("  Действие:  ${result.executedAction ?: "NONE"}")
+        if (result.targetPackage != null) {
+            log("  Пакет:     ${result.targetPackage}")
+        }
+        if (result.error != null) {
+            log("  Ошибка:    ${result.error}")
         }
     }
 
@@ -385,7 +479,7 @@ class MainActivity : AppCompatActivity() {
                 tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
                 tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
 
-                log("WAV $label: '${metrics.finalTranscription}' | RTF=${"%.3f".format(metrics.rtf)} | Decode=${metrics.totalDecodeDurationMs}ms | Audio=${metrics.audioDurationMs}ms | RAM=${"%.1f".format(metrics.peakRamMb)}MB")
+                log("WAV $label: '${metrics.finalTranscription}' | RTF=${"%.3f".format(metrics.rtf)} | Decode=${metrics.totalDecodeDurationMs}ms")
             }
         }
     }
