@@ -130,6 +130,20 @@ class MainActivity : AppCompatActivity() {
         updatePhraseCard()
         checkAudioPermission()
         checkOverlayPermission()
+        handleSimulationIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleSimulationIntent(intent)
+    }
+
+    private fun handleSimulationIntent(intent: Intent?) {
+        val simCmd = intent?.getStringExtra("simulate_command") ?: return
+        log("Получена команда симуляции из Intent: '$simCmd'")
+        runOnUiThread {
+            simulateCommand(simCmd)
+        }
     }
 
     override fun onResume() {

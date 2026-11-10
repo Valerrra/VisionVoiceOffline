@@ -42,12 +42,12 @@ object AppRegistry {
             defaultDisplayName = "LazyMedia Deluxe",
             candidatePackages = listOf(
                 "com.lazycatsoftware.lmd",
-                "com.wolf.google.lm",
                 "com.lazycatsoftware.lazymedia"
             ),
             russianAliases = listOf(
                 "лэйзи медиа", "лейзи медиа", "лэйзимедиа", "лейзимедиа",
-                "лэйзи", "лейзи", "lazy media", "lazymedia", "лэйзик",
+                "лэйзе медиа", "лейзе медиа", "лэйземедиа", "лейземедиа",
+                "лэйзи", "лейзи", "лэйзе", "лейзе", "lazy media", "lazymedia", "лэйзик",
                 "лэйзи медиа делюкс", "лейзи медиа делюкс", "lazymedia deluxe"
             )
         ),
@@ -170,6 +170,16 @@ object AppRegistry {
             ),
             russianAliases = listOf(
                 "опенвпн", "опен впн", "openvpn", "впн"
+            )
+        ),
+        StaticAppRule(
+            key = "launchermanager",
+            defaultDisplayName = "Launcher Manager",
+            candidatePackages = listOf(
+                "com.wolf.google.lm"
+            ),
+            russianAliases = listOf(
+                "лаунчер менеджер", "лаунчер манагер", "лаунчер", "launcher manager"
             )
         )
     )

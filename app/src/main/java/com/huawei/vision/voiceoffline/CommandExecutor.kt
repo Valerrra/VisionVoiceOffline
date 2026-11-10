@@ -217,17 +217,54 @@ class CommandExecutor(private val context: Context) {
     }
 
     private fun executeMinimizeApp(cmd: ParsedCommand): CommandResult {
-        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return navigateToHomeOrMinimize(cmd, isMinimize = true)
+    }
+
+    private fun navigateToHomeOrMinimize(cmd: ParsedCommand, isMinimize: Boolean): CommandResult {
+        try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(homeIntent)
+            return CommandResult(
+                command = cmd,
+                success = true,
+                statusMessage = if (isMinimize) "Приложение свёрнуто (Главный экран)" else "Переход на главный экран телевизора",
+                executedAction = if (isMinimize) "MINIMIZE_TO_HOME" else "GO_HOME"
+            )
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Direct CATEGORY_HOME restricted on Huawei HarmonyOS: ${e.message}")
+            if (context is android.app.Activity) {
+                context.moveTaskToBack(true)
+                return CommandResult(
+                    command = cmd,
+                    success = true,
+                    statusMessage = "Приложение свёрнуто в фон (moveTaskToBack)",
+                    executedAction = "MOVE_TASK_TO_BACK"
+                )
+            }
+            val launchIntent = context.packageManager.getLaunchIntentForPackage("com.huawei.homevision.launcher")
+            if (launchIntent != null) {
+                try {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launchIntent)
+                    return CommandResult(
+                        command = cmd,
+                        success = true,
+                        statusMessage = "Главный экран телевизора",
+                        executedAction = "START_LAUNCHER_PACKAGE"
+                    )
+                } catch (_: Exception) {}
+            }
+            return CommandResult(
+                command = cmd,
+                success = false,
+                statusMessage = "Переход на главный экран ограничен политикой Huawei HarmonyOS (требуется ABILITY_FOR_HIVOICE). Нажмите кнопку Домой на пульте.",
+                executedAction = "RESTRICTED_HOME_NAV",
+                error = "SECURITY_RESTRICTION_HIVOICE"
+            )
         }
-        context.startActivity(homeIntent)
-        return CommandResult(
-            command = cmd,
-            success = true,
-            statusMessage = "Приложение свёрнуто (Главный экран)",
-            executedAction = "MINIMIZE_TO_HOME"
-        )
     }
 
     private fun executeVolume(cmd: ParsedCommand): CommandResult {
@@ -315,19 +352,7 @@ class CommandExecutor(private val context: Context) {
 
     private fun executeNavigation(cmd: ParsedCommand): CommandResult {
         return when (cmd.action) {
-            "HOME" -> {
-                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_HOME)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(homeIntent)
-                CommandResult(
-                    command = cmd,
-                    success = true,
-                    statusMessage = "Переход на главный экран телевизора",
-                    executedAction = "GO_HOME"
-                )
-            }
+            "HOME" -> navigateToHomeOrMinimize(cmd, isMinimize = false)
             "BACK" -> {
                 CommandResult(
                     command = cmd,
