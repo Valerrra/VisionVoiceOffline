@@ -15,6 +15,7 @@ class VoiceOverlayPreferences(context: Context) {
         private const val KEY_OPERATING_MODE = "operating_mode"
         private const val KEY_SEARCH_POLICY = "search_source_policy"
         private const val KEY_DIALOGUE_TIMEOUT_SEC = "dialogue_timeout_sec"
+        private const val KEY_LAST_SEARCH_MEMORY_TIMEOUT_SEC = "last_search_memory_timeout_sec"
         private const val KEY_DEFAULT_SEARCH_APP = "default_search_app"
         private const val KEY_LAST_ACTIVE_PKG = "last_active_package"
     }
@@ -51,11 +52,11 @@ class VoiceOverlayPreferences(context: Context) {
 
     var searchPolicy: SearchPolicy
         get() {
-            val name = prefs.getString(KEY_SEARCH_POLICY, SearchPolicy.ASK_ALWAYS.name)
+            val name = prefs.getString(KEY_SEARCH_POLICY, SearchPolicy.PREFER_ACTIVE.name)
             return try {
-                SearchPolicy.valueOf(name ?: SearchPolicy.ASK_ALWAYS.name)
+                SearchPolicy.valueOf(name ?: SearchPolicy.PREFER_ACTIVE.name)
             } catch (_: Exception) {
-                SearchPolicy.ASK_ALWAYS
+                SearchPolicy.PREFER_ACTIVE
             }
         }
         set(value) = prefs.edit().putString(KEY_SEARCH_POLICY, value.name).apply()
@@ -63,6 +64,10 @@ class VoiceOverlayPreferences(context: Context) {
     var dialogueTimeoutSeconds: Int
         get() = prefs.getInt(KEY_DIALOGUE_TIMEOUT_SEC, 30)
         set(value) = prefs.edit().putInt(KEY_DIALOGUE_TIMEOUT_SEC, value.coerceIn(10, 120)).apply()
+
+    var lastSearchMemoryTimeoutSeconds: Int
+        get() = prefs.getInt(KEY_LAST_SEARCH_MEMORY_TIMEOUT_SEC, 120)
+        set(value) = prefs.edit().putInt(KEY_LAST_SEARCH_MEMORY_TIMEOUT_SEC, value.coerceIn(30, 600)).apply()
 
     var defaultSearchApp: String
         get() = prefs.getString(KEY_DEFAULT_SEARCH_APP, "lazymedia") ?: "lazymedia"

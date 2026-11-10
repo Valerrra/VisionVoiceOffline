@@ -409,8 +409,10 @@ object CommandParser {
                     return searchCandidate
                 }
 
-                // If explicitly requested as application ("открой/запусти приложение ...") or specific app launch verbs
-                if (prefix.contains("приложение") || prefix.startsWith("открой") || prefix.startsWith("запусти")) {
+                // If explicitly requested as application ("открой/запусти приложение ...") or mentions app/program/game
+                if (prefix.contains("приложение") || prefix.startsWith("запусти") ||
+                    remainder.contains("программ") || remainder.contains("приложен") ||
+                    remainder.contains("сервис") || remainder.contains("игр") || remainder.contains("клиент")) {
                     return ParsedCommand(
                         type = CommandType.OPEN_APP,
                         rawText = rawText,
@@ -420,6 +422,21 @@ object CommandParser {
                         params = mapOf("query" to remainder),
                         confidence = 0.7f,
                         matchedRule = "open_app_not_found"
+                    )
+                } else {
+                    // Content query via "открой ...", "включи ..." (e.g. "открой доктор кто", "включи интерстеллар")
+                    return ParsedCommand(
+                        type = CommandType.SEARCH,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "SEARCH",
+                        target = null,
+                        params = mapOf(
+                            "query" to remainder,
+                            "searchType" to "content_title_search"
+                        ),
+                        confidence = 0.85f,
+                        matchedRule = "content_search_via_open"
                     )
                 }
             }

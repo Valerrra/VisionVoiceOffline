@@ -3,6 +3,7 @@ package com.huawei.vision.voiceoffline.search
 import android.content.Context
 import android.util.Log
 import com.huawei.vision.voiceoffline.CommandResult
+import com.huawei.vision.voiceoffline.CommandType
 import com.huawei.vision.voiceoffline.ParsedCommand
 
 object SearchCoordinator {
@@ -10,21 +11,20 @@ object SearchCoordinator {
     private const val TAG = "SearchCoordinator"
 
     fun processSearchCommand(cmd: ParsedCommand, context: Context): CommandResult {
-        val rawQuery = (cmd.params["query"] as? String) ?: cmd.rawText
-        val resolved = SearchTargetResolver.resolve(cmd.rawText)
+        val parsedQuery = SearchQueryParser.parseInitialQuery(cmd.rawText)
+        val targetAppKey = parsedQuery.detectedTargetAppKey ?: (cmd.params["targetAppKey"] as? String)
+        val cleanQuery = parsedQuery.cleanQuery.ifEmpty { cmd.rawText }
 
-        val targetAppKey = resolved.targetAppKey ?: (cmd.params["targetAppKey"] as? String)
-        val cleanQuery = if (resolved.cleanQuery.isNotEmpty()) resolved.cleanQuery else rawQuery
-
-        Log.i(TAG, "Processing search: target=$targetAppKey, cleanQuery='$cleanQuery', raw='${cmd.rawText}'")
+        Log.i(TAG, "SearchCoordinator processing: target=$targetAppKey, cleanQuery='$cleanQuery', raw='${cmd.rawText}'")
 
         // 1. Explicit target specified
         if (!targetAppKey.isNullOrEmpty()) {
             val adapter = SearchAdapterRegistry.getAdapter(targetAppKey)
             if (adapter != null) {
-                if (adapter.isAvailable(context)) {
+                if (adapter.isAvailable(context) && !SearchAdapterRegistry.isAppExcludedFromSearch(context, adapter.targetAppKey)) {
                     Log.i(TAG, "Direct search execution in ${adapter.displayName} for '$cleanQuery'")
                     val execRes = adapter.executeSearch(context, cleanQuery)
+                    DialogueManager.recordSearchExecution(adapter.targetAppKey, adapter.displayName, cleanQuery, execRes)
                     return CommandResult(
                         command = cmd,
                         success = execRes.success,
@@ -34,16 +34,15 @@ object SearchCoordinator {
                         error = execRes.error?.name
                     )
                 } else {
-                    Log.w(TAG, "Explicit search target '$targetAppKey' is not installed")
-                    // Start dialogue suggesting installed alternatives, retaining the user query
+                    Log.w(TAG, "Explicit search target '$targetAppKey' is not installed or excluded")
                     val dialogueRes = DialogueManager.startSearchDialogue(cleanQuery, cmd.rawText, context)
-                    val disp = resolved.targetDisplayName ?: targetAppKey
-                    val statusMsg = "$disp не установлен. ${dialogueRes.statusMessage}"
+                    val disp = parsedQuery.detectedTargetDisplayName ?: targetAppKey
+                    val statusMsg = "$disp не доступен для поиска. ${dialogueRes.statusMessage}"
                     return CommandResult(
                         command = cmd,
                         success = false,
                         statusMessage = statusMsg,
-                        executedAction = "SEARCH_TARGET_NOT_INSTALLED",
+                        executedAction = "SEARCH_TARGET_UNAVAILABLE",
                         error = "APP_NOT_INSTALLED"
                     )
                 }
@@ -61,7 +60,7 @@ object SearchCoordinator {
         }
 
         // 2. Ambiguous target -> Contextual Dialogue
-        Log.i(TAG, "Ambiguous search target for '$cleanQuery'; initiating dialogue")
+        Log.i(TAG, "Ambiguous search target for '$cleanQuery'; initiating contextual dialogue")
         val dialogueRes = DialogueManager.startSearchDialogue(cleanQuery, cmd.rawText, context)
 
         if (dialogueRes.isActionComplete && dialogueRes.executionResult != null) {
@@ -78,7 +77,7 @@ object SearchCoordinator {
             command = cmd,
             success = true,
             statusMessage = dialogueRes.statusMessage,
-            executedAction = "DIALOGUE_AWAITING_TARGET"
+            executedAction = "DIALOGUE_${dialogueRes.state.name}"
         )
     }
 
@@ -89,10 +88,11 @@ object SearchCoordinator {
         }
 
         return if (dialogueRes.isActionComplete) {
-            val success = dialogueRes.state == DialogueState.SEARCH_COMPLETED || dialogueRes.state == DialogueState.CANCELLED
+            val success = dialogueRes.state == DialogueState.SEARCH_COMPLETED ||
+                    dialogueRes.state == DialogueState.CANCELLED
             CommandResult(
                 command = ParsedCommand(
-                    type = com.huawei.vision.voiceoffline.CommandType.SEARCH,
+                    type = CommandType.SEARCH,
                     rawText = rawText,
                     normalizedText = SearchTargetResolver.normalize(rawText),
                     action = dialogueRes.state.name,
@@ -106,16 +106,16 @@ object SearchCoordinator {
         } else {
             CommandResult(
                 command = ParsedCommand(
-                    type = com.huawei.vision.voiceoffline.CommandType.SEARCH,
+                    type = CommandType.SEARCH,
                     rawText = rawText,
                     normalizedText = SearchTargetResolver.normalize(rawText),
-                    action = "AWAITING_SEARCH_TARGET",
+                    action = dialogueRes.state.name,
                     confidence = 1.0f,
-                    matchedRule = "dialogue_clarification"
+                    matchedRule = "dialogue_prompt"
                 ),
                 success = true,
                 statusMessage = dialogueRes.statusMessage,
-                executedAction = "DIALOGUE_PROMPT"
+                executedAction = "DIALOGUE_${dialogueRes.state.name}"
             )
         }
     }
