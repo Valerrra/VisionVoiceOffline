@@ -23,24 +23,24 @@
         android:paddingEnd="24dp"
         android:paddingBottom="14dp">
 
-        <!-- Status Icon / State Badge -->
+        <!-- Brand Icon / Mic Symbol -->
         <FrameLayout
             android:id="@+id/layoutOverlayIconBg"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:layout_marginEnd="20dp"
             android:background="@drawable/bg_icon_circle">
 
-            <TextView
-                android:id="@+id/tvOverlayIcon"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:text="🎙"
-                android:textSize="26sp" />
+            <ImageView
+                android:id="@+id/ivOverlayLogo"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_overlay_symbol"
+                android:contentDescription="@string/app_name" />
         </FrameLayout>
 
-        <!-- Text content: Raw STT, Normalized command, Execution Result -->
+        <!-- Text content: State, Raw STT, Normalized command, Execution Result -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -59,25 +59,25 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_badge_state"
-                    android:paddingStart="8dp"
-                    android:paddingTop="2dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="2dp"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
                     android:text="СЛУШАЮ"
-                    android:textColor="@color/accent_green"
-                    android:textSize="12sp"
+                    android:textColor="@color/brand_cyan"
+                    android:textSize="13sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tvOverlayStt"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
+                    android:layout_marginStart="14dp"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Говорите в пульт..."
                     android:textColor="@color/text_primary"
-                    android:textSize="20sp"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -86,7 +86,7 @@
                 android:id="@+id/layoutOverlayResult"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:visibility="gone">
@@ -95,49 +95,22 @@
                     android:id="@+id/tvOverlayIntentBadge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="14sp"
+                    android:textColor="@color/brand_cyan"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
                     android:text="Команда:" />
 
                 <TextView
                     android:id="@+id/tvOverlayResultText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_marginStart="10dp"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/text_mono"
-                    android:textSize="16sp" />
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp" />
             </LinearLayout>
 
-        </LinearLayout>
-
-        <!-- Right Side: Metrics & dB meter -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:gravity="end"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/tvOverlayMeter"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:text="RMS: -96 dB"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvOverlayLatency"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:fontFamily="monospace"
-                android:text="— ms | RTF: —"
-                android:textColor="@color/text_mono"
-                android:textSize="12sp" />
         </LinearLayout>
 
     </LinearLayout>

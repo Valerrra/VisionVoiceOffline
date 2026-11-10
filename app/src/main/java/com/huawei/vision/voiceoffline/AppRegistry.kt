@@ -288,11 +288,11 @@ object AppRegistry {
         val prefs = context.getSharedPreferences(PREFS_USER_ALIASES, Context.MODE_PRIVATE)
         val allUserPrefs = prefs.all
         for ((prefKey, aliasValue) in allUserPrefs) {
-            val alias = normalize(aliasValue.toString())
-            if (alias.isNotEmpty()) {
+            val aliasesList = aliasValue.toString().split('|').map { normalize(it) }.filter { it.isNotEmpty() }
+            if (aliasesList.isNotEmpty()) {
                 val match = discovered.values.firstOrNull { it.key == prefKey || it.packageName == prefKey }
                 if (match != null) {
-                    val updatedAliases = match.aliases.toMutableSet().apply { add(alias) }
+                    val updatedAliases = match.aliases.toMutableSet().apply { addAll(aliasesList) }
                     discovered[match.packageName] = match.copy(aliases = updatedAliases, isUserCustom = true)
                 }
             }
@@ -467,11 +467,24 @@ object AppRegistry {
 
     fun getAllApps(): List<InstalledApp> = dynamicApps.toList()
 
+    fun getApp(packageName: String): InstalledApp? {
+        return dynamicApps.firstOrNull { it.packageName == packageName || it.key == packageName }
+    }
+
+    fun getUserAliases(context: Context, appKeyOrPackage: String): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS_USER_ALIASES, Context.MODE_PRIVATE)
+        val raw = prefs.getString(appKeyOrPackage, "") ?: ""
+        return raw.split('|').map { normalize(it) }.filter { it.isNotEmpty() }.toSet()
+    }
+
     fun addUserAlias(context: Context, appKeyOrPackage: String, alias: String) {
         val norm = normalize(alias)
         if (norm.isEmpty()) return
+        val currentSet = getUserAliases(context, appKeyOrPackage).toMutableSet()
+        currentSet.add(norm)
+
         val prefs = context.getSharedPreferences(PREFS_USER_ALIASES, Context.MODE_PRIVATE)
-        prefs.edit().putString(appKeyOrPackage, norm).apply()
+        prefs.edit().putString(appKeyOrPackage, currentSet.joinToString("|")).apply()
 
         val app = dynamicApps.firstOrNull { it.key == appKeyOrPackage || it.packageName == appKeyOrPackage }
         if (app != null) {
@@ -481,7 +494,21 @@ object AppRegistry {
         }
     }
 
-    fun removeUserAlias(context: Context, appKeyOrPackage: String) {
+    fun removeUserAlias(context: Context, appKeyOrPackage: String, alias: String) {
+        val norm = normalize(alias)
+        val currentSet = getUserAliases(context, appKeyOrPackage).toMutableSet()
+        currentSet.remove(norm)
+
+        val prefs = context.getSharedPreferences(PREFS_USER_ALIASES, Context.MODE_PRIVATE)
+        if (currentSet.isEmpty()) {
+            prefs.edit().remove(appKeyOrPackage).apply()
+        } else {
+            prefs.edit().putString(appKeyOrPackage, currentSet.joinToString("|")).apply()
+        }
+        init(context)
+    }
+
+    fun resetAppAliases(context: Context, appKeyOrPackage: String) {
         val prefs = context.getSharedPreferences(PREFS_USER_ALIASES, Context.MODE_PRIVATE)
         prefs.edit().remove(appKeyOrPackage).apply()
         init(context)

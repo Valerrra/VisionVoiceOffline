@@ -334,11 +334,11 @@ object CommandParser {
         }
 
         val backTriggers = listOf(
-            "назад", "вернись назад", "вернись", "назад в меню", "шаг назад"
+            "назад", "вернись назад", "вернись", "назад в меню", "шаг назад", "отмена", "отмени"
         )
         if (backTriggers.any { norm == it }) {
             return ParsedCommand(
-                type = CommandType.SYSTEM_NAV,
+                type = CommandType.SYSTEM_BACK,
                 rawText = rawText,
                 normalizedText = norm,
                 action = "BACK",

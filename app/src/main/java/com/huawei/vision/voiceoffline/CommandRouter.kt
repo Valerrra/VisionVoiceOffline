@@ -11,8 +11,13 @@ class CommandRouter(private val context: Context) {
 
     private val parser = CommandParser
     private val executor = CommandExecutor(context)
+    private val prefs = VoiceOverlayPreferences(context)
 
-    var currentMode: OperatingMode = OperatingMode.COMMAND
+    var currentMode: OperatingMode
+        get() = prefs.operatingMode
+        set(value) {
+            prefs.operatingMode = value
+        }
 
     fun route(rawText: String): CommandResult {
         Log.i(TAG, "Routing text: '$rawText' (Mode: $currentMode)")

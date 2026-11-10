@@ -1,15 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#121418</color>
-    <color name="card_bg">#1E222B</color>
-    <color name="card_border">#2C3240</color>
+    <!-- Brand Deep Navy & Night Colors -->
+    <color name="bg_dark">#040720</color>
+    <color name="brand_dark_bg">#070B26</color>
+    <color name="brand_header_bg">#091033</color>
+    <color name="card_bg">#0D1642</color>
+    <color name="card_bg_elevated">#111C54</color>
+    <color name="card_border">#1B2A6B</color>
+
+    <!-- Brand Cyan & Turquoise Accents (From Approved Logo) -->
+    <color name="brand_cyan">#00D2FF</color>
+    <color name="brand_cyan_light">#4DE4FF</color>
+    <color name="brand_cyan_glow">#3300D2FF</color>
+    <color name="brand_cyan_border">#8000D2FF</color>
     <color name="accent_blue">#0091FF</color>
+
+    <!-- Semantic Feedback Colors -->
     <color name="accent_green">#00E676</color>
-    <color name="accent_red">#FF5252</color>
+    <color name="accent_green_bg">#1A00E676</color>
+    <color name="accent_red">#FF3D00</color>
+    <color name="accent_red_bg">#1AFF3D00</color>
     <color name="accent_yellow">#FFD600</color>
+    <color name="accent_yellow_bg">#1AFFD600</color>
+
+    <!-- Text Colors -->
     <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#9EABB8</color>
-    <color name="text_mono">#64FFDA</color>
-    <color name="btn_focused">#38445A</color>
-    <color name="btn_normal">#262C38</color>
+    <color name="text_secondary">#8EA3D0</color>
+    <color name="text_muted">#586E9E</color>
+    <color name="text_mono">#00D2FF</color>
+
+    <!-- TV D-pad Button Focus States -->
+    <color name="btn_normal">#101A4A</color>
+    <color name="btn_focused">#192C78</color>
+    <color name="btn_focused_border">#00D2FF</color>
+    <color name="btn_pressed">#00D2FF</color>
+
+    <!-- Overlay Colors -->
+    <color name="overlay_bg">#F2070B26</color>
+    <color name="overlay_border">#8000D2FF</color>
 </resources>

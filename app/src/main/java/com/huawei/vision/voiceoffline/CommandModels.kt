@@ -9,6 +9,7 @@ enum class CommandType {
     OPEN_APP,
     CLOSE_APP,
     MINIMIZE_APP,
+    SYSTEM_BACK,
     SYSTEM_NAV,
     VOLUME_CONTROL,
     MEDIA_CONTROL,
@@ -47,7 +48,9 @@ data class InstalledApp(
     val isSystemApp: Boolean = false,
     val isUserCustom: Boolean = false,
     val fallbackAction: String? = null
-)
+) {
+    val displayName: String get() = appLabel
+}
 
 data class AppMatch(
     val app: InstalledApp,

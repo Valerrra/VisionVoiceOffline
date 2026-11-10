@@ -27,7 +27,7 @@ class CommandExecutor(private val context: Context) {
                 CommandType.VOLUME_CONTROL -> executeVolume(cmd)
                 CommandType.MEDIA_CONTROL -> executeMedia(cmd)
                 CommandType.SEARCH -> executeSearch(cmd)
-                CommandType.SYSTEM_NAV -> executeNavigation(cmd)
+                CommandType.SYSTEM_BACK, CommandType.SYSTEM_NAV -> executeNavigation(cmd)
                 CommandType.DICTATION_TEXT -> CommandResult(
                     command = cmd,
                     success = true,
@@ -42,17 +42,44 @@ class CommandExecutor(private val context: Context) {
                 )
             }
             val elapsed = SystemClock.elapsedRealtime() - t0
-            result.copy(executionTimeMs = elapsed)
+            val finalResult = result.copy(executionTimeMs = elapsed)
+
+            // Persist to local history
+            try {
+                CommandHistoryManager.getInstance(context).addEntry(
+                    rawText = cmd.rawText,
+                    intent = cmd.type.name,
+                    target = cmd.target,
+                    statusMessage = finalResult.statusMessage,
+                    success = finalResult.success,
+                    error = finalResult.error
+                )
+            } catch (he: Exception) {
+                Log.w(TAG, "Error saving history entry", he)
+            }
+
+            finalResult
         } catch (e: Exception) {
             val elapsed = SystemClock.elapsedRealtime() - t0
             Log.e(TAG, "Error executing command: ${cmd.action}", e)
-            CommandResult(
+            val errResult = CommandResult(
                 command = cmd,
                 success = false,
                 statusMessage = "Ошибка выполнения команды: ${e.message}",
                 error = e.javaClass.simpleName,
                 executionTimeMs = elapsed
             )
+            try {
+                CommandHistoryManager.getInstance(context).addEntry(
+                    rawText = cmd.rawText,
+                    intent = cmd.type.name,
+                    target = cmd.target,
+                    statusMessage = errResult.statusMessage,
+                    success = false,
+                    error = errResult.error
+                )
+            } catch (_: Exception) {}
+            errResult
         }
     }
 
@@ -354,10 +381,13 @@ class CommandExecutor(private val context: Context) {
         return when (cmd.action) {
             "HOME" -> navigateToHomeOrMinimize(cmd, isMinimize = false)
             "BACK" -> {
+                if (context is android.app.Activity) {
+                    context.runOnUiThread { context.onBackPressed() }
+                }
                 CommandResult(
                     command = cmd,
                     success = true,
-                    statusMessage = "Навигация назад (зафиксировано)",
+                    statusMessage = "Навигация назад (Back)",
                     executedAction = "NAV_BACK"
                 )
             }

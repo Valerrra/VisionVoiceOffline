@@ -68,7 +68,7 @@ class VoiceOverlayService : Service() {
     private lateinit var commandRouter: CommandRouter
     private var packageReceiver: BroadcastReceiver? = null
 
-    private var sessionState = MainActivity.SessionState.IDLE
+    private var sessionState = SessionState.IDLE
     private var lastSessionEndTimeMs = 0L
     private var keyPressTimeMs = 0L
 
@@ -156,7 +156,7 @@ class VoiceOverlayService : Service() {
     @Synchronized
     private fun handleVoiceStart(source: String) {
         val now = SystemClock.elapsedRealtime()
-        if (sessionState != MainActivity.SessionState.IDLE) {
+        if (sessionState != SessionState.IDLE) {
             Log.w(TAG, "Ignoring duplicate KEY_DOWN ($source): state=$sessionState")
             return
         }
@@ -172,7 +172,7 @@ class VoiceOverlayService : Service() {
             return
         }
 
-        sessionState = MainActivity.SessionState.RECORDING
+        sessionState = SessionState.RECORDING
         keyPressTimeMs = now
 
         overlayWindowManager.showListening()
@@ -182,7 +182,7 @@ class VoiceOverlayService : Service() {
         val started = audioCapture.startCapture(
             onAudioChunk = { samples, rmsDb, peak ->
                 sttEngine.feedSamples(samples) { partialText ->
-                    if (sessionState == MainActivity.SessionState.RECORDING) {
+                    if (sessionState == SessionState.RECORDING) {
                         overlayWindowManager.updatePartial(partialText, rmsDb, peak)
                     }
                 }
@@ -193,14 +193,14 @@ class VoiceOverlayService : Service() {
             onError = { errMsg ->
                 Log.e(TAG, "Capture error: $errMsg")
                 overlayWindowManager.showError("Ошибка микрофона: $errMsg")
-                sessionState = MainActivity.SessionState.IDLE
+                sessionState = SessionState.IDLE
                 lastSessionEndTimeMs = SystemClock.elapsedRealtime()
                 telemetryListener?.onError(errMsg)
             }
         )
 
         if (!started) {
-            sessionState = MainActivity.SessionState.IDLE
+            sessionState = SessionState.IDLE
             lastSessionEndTimeMs = SystemClock.elapsedRealtime()
             overlayWindowManager.showError("Не удалось открыть микрофон пульта")
         }
@@ -208,7 +208,7 @@ class VoiceOverlayService : Service() {
 
     @Synchronized
     private fun handleVoiceStop(source: String) {
-        if (sessionState != MainActivity.SessionState.RECORDING) {
+        if (sessionState != SessionState.RECORDING) {
             Log.w(TAG, "Ignoring KEY_UP ($source): state=$sessionState")
             return
         }
@@ -216,7 +216,7 @@ class VoiceOverlayService : Service() {
         val keyUpTimeMs = SystemClock.elapsedRealtime()
         val pressDurationMs = keyUpTimeMs - keyPressTimeMs
 
-        sessionState = MainActivity.SessionState.FINALIZING
+        sessionState = SessionState.FINALIZING
         overlayWindowManager.showProcessing()
 
         Log.i(TAG, "KEY_UP ($source, hold ${pressDurationMs} ms). Graceful drain starting...")
@@ -249,7 +249,7 @@ class VoiceOverlayService : Service() {
 
                 telemetryListener?.onSessionFinished(metrics, cmdResult)
 
-                sessionState = MainActivity.SessionState.IDLE
+                sessionState = SessionState.IDLE
                 lastSessionEndTimeMs = SystemClock.elapsedRealtime()
             }
         }

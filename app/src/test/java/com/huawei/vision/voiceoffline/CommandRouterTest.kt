@@ -240,7 +240,7 @@ class CommandRouterTest {
         assertEquals("HOME", home2.action)
 
         val backCmd = CommandParser.parse("назад")
-        assertEquals(CommandType.SYSTEM_NAV, backCmd.type)
+        assertEquals(CommandType.SYSTEM_BACK, backCmd.type)
         assertEquals("BACK", backCmd.action)
     }
 
@@ -536,5 +536,35 @@ class CommandRouterTest {
         assertEquals(CommandType.CLOSE_APP, unknownClose.type)
         assertEquals("NOT_FOUND", unknownClose.action)
         assertFalse(unknownClose.type == CommandType.OPEN_APP)
+    }
+
+    @Test
+    fun testSystemBackCommands() {
+        val backPhrases = listOf(
+            "назад",
+            "вернись",
+            "шаг назад",
+            "отмена"
+        )
+        for (phrase in backPhrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.SYSTEM_BACK, cmd.type)
+            assertEquals("BACK", cmd.action)
+        }
+    }
+
+    @Test
+    fun testLazyMediaLeizePhoneticVariants() {
+        val variants = listOf(
+            "открой лейзе медиа",
+            "открой лэйзи медиа",
+            "лейзе медиа",
+            "лэйзи"
+        )
+        for (phrase in variants) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.OPEN_APP, cmd.type)
+            assertEquals("Failed target for '$phrase'", "lazymedia", cmd.target)
+        }
     }
 }
