@@ -83,3 +83,12 @@ flowchart TD
 - `SYSTEM_ALERT_WINDOW` — отображение полупрозрачного оверлея поверх других окон.
 - `RECEIVE_BOOT_COMPLETED` — автозапуск после включения телевизора.
 - `BIND_ACCESSIBILITY_SERVICE` — выполнение системных действий HOME и BACK.
+
+---
+
+## Лицензия
+
+Исходный код проекта **VisionVoiceOffline** распространяется под лицензией **Apache License 2.0**. См. файл [LICENSE](LICENSE).
+
+Сведения о лицензиях сторонних библиотек (sherpa-onnx, ONNX Runtime, AndroidX, Zipformer RU) приведены в файле [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+

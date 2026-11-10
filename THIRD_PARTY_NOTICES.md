@@ -45,4 +45,15 @@
 
 ## Лицензия собственного кода проекта VisionVoiceOffline
 
-Владельцу проекта предлагается выпустить исходный код под лицензией **Apache-2.0** или **MIT**. Выбор лицензии закрепляется перед публикацией публичного репозитория.
+Исходный код проекта **VisionVoiceOffline** распространяется под условиями свободной лицензии **Apache License 2.0**.
+Полный текст условий приведен в файле [LICENSE](LICENSE).
+
+```text
+Copyright 2026 VisionVoiceOffline Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+```

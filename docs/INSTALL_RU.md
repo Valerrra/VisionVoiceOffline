@@ -49,14 +49,41 @@
    adb -s 192.168.1.100:5555 shell appops set com.huawei.vision.voiceoffline SYSTEM_ALERT_WINDOW allow
    ```
 5. **Включение службы навигации (Accessibility):**
-   ```bash
-   # Получите текущий список:
-   adb -s 192.168.1.100:5555 shell settings get secure enabled_accessibility_services
+   
+   Служба `VisionVoiceAccessibilityService` требуется исключительно для выполнения команд «Домой», «Назад» и «Недавние» (поскольку прямой запуск Home Intent заблокирован защитой HarmonyOS `ABILITY_FOR_HIVOICE`). Она **не читает** контент окон (`canRetrieveWindowContent="false"`).
 
-   # Добавьте компонент VisionVoice к списку (через двоеточие):
-   adb -s 192.168.1.100:5555 shell settings put secure enabled_accessibility_services com.huawei.vision.voiceoffline/com.huawei.vision.voiceoffline.VisionVoiceAccessibilityService
-   adb -s 192.168.1.100:5555 shell settings put secure accessibility_enabled 1
+   *Шаг 5.1. Проверьте текущий список служб и сохраните его значение:*
+   ```bash
+   adb -s 192.168.1.100:5555 shell settings get secure enabled_accessibility_services
    ```
+
+   *Шаг 5.2. Активация компонента:*
+   - **Если вывод пустой или `null` (других служб нет):**
+     ```bash
+     adb -s 192.168.1.100:5555 shell settings put secure enabled_accessibility_services com.huawei.vision.voiceoffline/com.huawei.vision.voiceoffline.VisionVoiceAccessibilityService
+     adb -s 192.168.1.100:5555 shell settings put secure accessibility_enabled 1
+     ```
+   - **Если в выводе уже есть другие службы (например, `com.example/.Service`):**
+     *Внимание:* Допишите VisionVoice в конец через двоеточие (`:`), чтобы не отключить существующие службы (например, Button Mapper):
+     ```bash
+     adb -s 192.168.1.100:5555 shell settings put secure enabled_accessibility_services "com.example/.Service:com.huawei.vision.voiceoffline/com.huawei.vision.voiceoffline.VisionVoiceAccessibilityService"
+     adb -s 192.168.1.100:5555 shell settings put secure accessibility_enabled 1
+     ```
+
+   *Восстановление исходного состояния Accessibility (при необходимости):*
+   - Если ранее служб не было:
+     ```bash
+     adb -s 192.168.1.100:5555 shell settings delete secure enabled_accessibility_services
+     adb -s 192.168.1.100:5555 shell settings put secure accessibility_enabled 0
+     ```
+   - Если другие службы были, верните сохраненную исходную строку без VisionVoice:
+     ```bash
+     adb -s 192.168.1.100:5555 shell settings put secure enabled_accessibility_services "com.example/.Service"
+     ```
+   - Либо воспользуйтесь готовым автоматическим скриптом:
+     ```powershell
+     .\Installer\Restore-VisionVoicePermissions.ps1 -DeviceIp 192.168.1.100
+     ```
 6. **Запуск службы ассистента:**
    ```bash
    adb -s 192.168.1.100:5555 shell am start-foreground-service -n com.huawei.vision.voiceoffline/.VoiceOverlayService

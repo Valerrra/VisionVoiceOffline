@@ -27,3 +27,12 @@ Operates completely on-device without third-party cloud services (Google, Yandex
    ```
 
 For detailed instructions in Russian, see [INSTALL_RU.md](docs/INSTALL_RU.md) and [ADB_SETUP_RU.md](docs/ADB_SETUP_RU.md).
+
+---
+
+## License
+
+This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+
+Third-party component licenses and neural network model attributions are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+

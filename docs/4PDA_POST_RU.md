@@ -68,7 +68,7 @@
 
 ### [B]Ссылки[/B]
 - **Исходный код на GitHub:** [Ссылка появится после публикации репозитория]
-- **Релизный APK:** `VisionVoiceOffline-v0.1.0-beta.apk` (SHA-256: `b24185ce637c6baea9238e355ebfeb4d70c837867ad11923cf3ab88eef1d110e`)
+- **Релизный APK:** `VisionVoiceOffline-v0.1.0-beta.apk` (SHA-256: `67f9b43dfc56505fbbb4efbcdeed9678c0af384a73f37e3add8c13f1ed189ce3`)
 
 ---
 
