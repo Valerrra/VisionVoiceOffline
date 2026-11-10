@@ -375,4 +375,166 @@ class CommandRouterTest {
         assertTrue(states.contains(VoiceOverlayState.RESULT))
         assertTrue(states.contains(VoiceOverlayState.ERROR))
     }
+
+    // --- 10. M4.6 Dynamic App Registry, LazyMedia, ByeByeDPI, Close & Minimize Semantics Tests ---
+
+    @Test
+    fun testLazyMediaPhoneticAndEnglishVariations() {
+        val phrases = listOf(
+            "открой лэйзи медиа",
+            "открой лейзи медиа",
+            "открой лэйзимедиа",
+            "открой лейзимедиа",
+            "открой лэйзи",
+            "открой lazy media",
+            "лэйзи медиа",
+            "лейзи медиа",
+            "лэйзи медиа делюкс",
+            "запусти лэйзи медиа",
+            "приложение лэйзи медиа"
+        )
+        for (phrase in phrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Expected OPEN_APP for '$phrase'", CommandType.OPEN_APP, cmd.type)
+            assertEquals("Expected target 'lazymedia' for '$phrase'", "lazymedia", cmd.target)
+            assertEquals("Expected action OPEN for '$phrase'", "OPEN", cmd.action)
+        }
+    }
+
+    @Test
+    fun testByeByeDPIPhoneticAndEnglishVariations() {
+        val phrases = listOf(
+            "открой байбай дипиай",
+            "открой байбайдипиай",
+            "открой бай бай ди пи ай",
+            "открой бай дипиай",
+            "открой байбай",
+            "открой byedpi",
+            "открой bye bye dpi",
+            "байбай дипиай",
+            "запусти байбай дипиай",
+            "приложение байбай дипиай"
+        )
+        for (phrase in phrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Expected OPEN_APP for '$phrase'", CommandType.OPEN_APP, cmd.type)
+            assertEquals("Expected target 'byedpi' for '$phrase'", "byedpi", cmd.target)
+            assertEquals("Expected action OPEN for '$phrase'", "OPEN", cmd.action)
+        }
+    }
+
+    @Test
+    fun testCloseAppStrictDisambiguationMustNeverBeOpenApp() {
+        // Core bug in M4: «закрой ютуб» was opening YouTube!
+        val closePhrases = listOf(
+            "закрой ютуб" to "youtube",
+            "закрой лэйзи медиа" to "lazymedia",
+            "закрой лейзи медиа" to "lazymedia",
+            "закрой байбай дипиай" to "byedpi",
+            "закрой лампу" to "lampa",
+            "закрой кинопоиск" to "kinopoisk",
+            "закрой настройки" to "settings",
+            "выход из ютуб" to "youtube",
+            "останови ютуб" to "youtube",
+            "заверши ютуб" to "youtube"
+        )
+
+        for ((phrase, expectedTarget) in closePhrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Command '$phrase' MUST be parsed as CLOSE_APP", CommandType.CLOSE_APP, cmd.type)
+            assertEquals("Command '$phrase' action MUST be CLOSE", "CLOSE", cmd.action)
+            assertEquals("Command '$phrase' target mismatch", expectedTarget, cmd.target)
+            // Explicitly assert it is NOT OPEN_APP
+            assertFalse("Command '$phrase' must NEVER be OPEN_APP", cmd.type == CommandType.OPEN_APP)
+        }
+    }
+
+    @Test
+    fun testCloseCurrentAppGenericTriggers() {
+        val genericClosePhrases = listOf(
+            "закрой",
+            "закрой приложение",
+            "закройте приложение",
+            "выйди из приложения",
+            "выход из приложения",
+            "останови приложение"
+        )
+        for (phrase in genericClosePhrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.CLOSE_APP, cmd.type)
+            assertEquals("Failed action for '$phrase'", "CLOSE_CURRENT", cmd.action)
+            assertFalse("Must never be OPEN_APP", cmd.type == CommandType.OPEN_APP)
+        }
+    }
+
+    @Test
+    fun testMinimizeAppTriggers() {
+        val minimizePhrases = listOf(
+            "сверни",
+            "сверни приложение",
+            "свернуть приложение",
+            "сверни в фон",
+            "свернуть в фон",
+            "в фон"
+        )
+        for (phrase in minimizePhrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.MINIMIZE_APP, cmd.type)
+            assertEquals("Failed action for '$phrase'", "MINIMIZE", cmd.action)
+            assertFalse("Must never be OPEN_APP", cmd.type == CommandType.OPEN_APP)
+        }
+    }
+
+    @Test
+    fun testLatinToCyrillicTransliteration() {
+        val t1 = AppRegistry.transliterateLatinToCyrillic("lazymedia")
+        assertEquals("лазимедиа", t1)
+
+        val t2 = AppRegistry.transliterateLatinToCyrillic("byedpi")
+        assertEquals("бедпи", t2)
+
+        val t3 = AppRegistry.transliterateLatinToCyrillic("kodi")
+        assertEquals("коди", t3)
+    }
+
+    @Test
+    fun testDynamicAppRegistrationAndMatching() {
+        try {
+            AppRegistry.resetForTesting()
+
+            val customApp = InstalledApp(
+                key = "coolplayer",
+                packageName = "org.cool.player",
+                activityName = "org.cool.player.MainActivity",
+                appLabel = "Кул Плеер",
+                aliases = setOf("кул плеер", "плеер", "cool player")
+            )
+            AppRegistry.registerAppForTesting(customApp)
+
+            val openCmd = CommandParser.parse("открой кул плеер")
+            assertEquals(CommandType.OPEN_APP, openCmd.type)
+            assertEquals("coolplayer", openCmd.target)
+            assertEquals("org.cool.player", openCmd.params["packageName"])
+
+            val closeCmd = CommandParser.parse("закрой кул плеер")
+            assertEquals(CommandType.CLOSE_APP, closeCmd.type)
+            assertEquals("coolplayer", closeCmd.target)
+            assertEquals("org.cool.player", closeCmd.params["packageName"])
+            assertFalse(closeCmd.type == CommandType.OPEN_APP)
+        } finally {
+            AppRegistry.resetForTesting()
+        }
+    }
+
+    @Test
+    fun testMissingAppSafelyReportedWithoutRandomLaunch() {
+        val unknownOpen = CommandParser.parse("открой совершенно неизвестная программа")
+        assertEquals(CommandType.OPEN_APP, unknownOpen.type)
+        assertEquals("NOT_FOUND", unknownOpen.action)
+
+        val unknownClose = CommandParser.parse("закрой совершенно неизвестная программа")
+        assertEquals(CommandType.CLOSE_APP, unknownClose.type)
+        assertEquals("NOT_FOUND", unknownClose.action)
+        assertFalse(unknownClose.type == CommandType.OPEN_APP)
+    }
 }

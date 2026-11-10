@@ -66,6 +66,7 @@ class VoiceOverlayService : Service() {
     private lateinit var sttEngine: SttEngine
     private lateinit var audioCapture: RemoteAudioCapture
     private lateinit var commandRouter: CommandRouter
+    private var packageReceiver: BroadcastReceiver? = null
 
     private var sessionState = MainActivity.SessionState.IDLE
     private var lastSessionEndTimeMs = 0L
@@ -95,6 +96,10 @@ class VoiceOverlayService : Service() {
         sttEngine = SttEngine(this)
         audioCapture = RemoteAudioCapture(this)
         commandRouter = CommandRouter(this)
+
+        // Initialize DynamicAppRegistry and listen for installed/removed packages
+        AppRegistry.init(applicationContext)
+        packageReceiver = AppRegistry.registerPackageReceiver(this)
 
         createNotificationChannel()
         val notification = buildForegroundNotification("Инициализация модели речи...")
@@ -298,6 +303,12 @@ class VoiceOverlayService : Service() {
             unregisterReceiver(voiceKeyReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering voice receiver", e)
+        }
+
+        try {
+            packageReceiver?.let { unregisterReceiver(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering package receiver", e)
         }
 
         overlayWindowManager.destroy()

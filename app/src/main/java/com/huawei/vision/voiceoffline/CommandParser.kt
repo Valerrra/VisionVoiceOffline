@@ -4,15 +4,35 @@ import java.util.Locale
 
 object CommandParser {
 
-    private val LAUNCH_PREFIXES = listOf(
+    private val OPEN_PREFIXES = listOf(
         "открой приложение", "откройте приложение",
         "запусти приложение", "запустите приложение",
         "включи приложение", "включите приложение",
+        "перейди в приложение", "перейти в приложение",
         "открой", "откройте",
         "запусти", "запустите",
         "включи", "включите",
         "перейди в", "перейти в",
         "старт", "пуск"
+    )
+
+    private val CLOSE_PREFIXES = listOf(
+        "закрой приложение", "закройте приложение",
+        "выход из приложения", "выйди из приложения",
+        "останови приложение", "остановите приложение",
+        "заверши приложение", "завершите приложение",
+        "закрой", "закройте",
+        "выход из", "выйди из",
+        "останови", "остановите",
+        "заверши", "завершите",
+        "погаси", "погасить"
+    )
+
+    private val MINIMIZE_TRIGGERS = listOf(
+        "сверни приложение", "свернуть приложение",
+        "сверни в фон", "свернуть в фон",
+        "в фон", "в фоновый режим",
+        "сверни", "свернуть"
     )
 
     private val SEARCH_PREFIXES = listOf(
@@ -27,7 +47,7 @@ object CommandParser {
         var s = text.lowercase(Locale.ROOT)
         // Replace Russian ё with е
         s = s.replace('ё', 'е')
-        // Remove common punctuation
+        // Remove common punctuation except hyphens
         s = s.replace(Regex("[^a-zа-я0-9\\s-]"), " ")
         // Collapse multiple whitespace
         s = s.replace(Regex("\\s+"), " ").trim()
@@ -48,22 +68,28 @@ object CommandParser {
             )
         }
 
-        // 1. Volume commands
+        // 1. Explicit Close Command ("закрой ...", "выход из ...")
+        parseCloseCommand(rawText, normalized)?.let { return it }
+
+        // 2. Explicit Minimize Command ("сверни ...", "в фон")
+        parseMinimizeCommand(rawText, normalized)?.let { return it }
+
+        // 3. Volume commands
         parseVolumeCommand(rawText, normalized)?.let { return it }
 
-        // 2. Media control commands
+        // 4. Media control commands
         parseMediaCommand(rawText, normalized)?.let { return it }
 
-        // 3. System navigation commands
+        // 5. System navigation commands (HOME, BACK)
         parseNavigationCommand(rawText, normalized)?.let { return it }
 
-        // 4. App Launch commands
+        // 6. Explicit App Launch commands ("открой ...", "запусти ...") or direct standalone app name
         parseAppLaunchCommand(rawText, normalized)?.let { return it }
 
-        // 5. Search & Media query commands
+        // 7. Search & Media query commands ("найди ...", "фильмы с ...")
         parseSearchCommand(rawText, normalized)?.let { return it }
 
-        // 6. Unknown / Unambiguous rejection
+        // 8. Rejection / Unambiguous unknown
         return ParsedCommand(
             type = CommandType.UNKNOWN,
             rawText = rawText,
@@ -72,6 +98,81 @@ object CommandParser {
             confidence = 0.0f,
             matchedRule = "no_match_found"
         )
+    }
+
+    private fun parseCloseCommand(rawText: String, norm: String): ParsedCommand? {
+        for (prefix in CLOSE_PREFIXES) {
+            if (norm == prefix) {
+                return ParsedCommand(
+                    type = CommandType.CLOSE_APP,
+                    rawText = rawText,
+                    normalizedText = norm,
+                    action = "CLOSE_CURRENT",
+                    confidence = 1.0f,
+                    matchedRule = "close_current_app"
+                )
+            }
+            if (norm.startsWith("$prefix ")) {
+                val remainder = norm.substring(prefix.length).trim()
+                if (remainder.isEmpty() || remainder == "приложение") {
+                    return ParsedCommand(
+                        type = CommandType.CLOSE_APP,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "CLOSE_CURRENT",
+                        confidence = 1.0f,
+                        matchedRule = "close_current_app"
+                    )
+                }
+
+                // Match specific app to close
+                val match = AppRegistry.findApp(remainder)
+                if (match != null) {
+                    return ParsedCommand(
+                        type = CommandType.CLOSE_APP,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "CLOSE",
+                        target = match.app.key,
+                        params = mapOf(
+                            "displayName" to match.app.appLabel,
+                            "packageName" to match.app.packageName,
+                            "matchedAlias" to match.matchedAlias,
+                            "matchScore" to match.score,
+                            "isAmbiguous" to match.isAmbiguous
+                        ),
+                        confidence = match.score,
+                        matchedRule = "close_specific_app"
+                    )
+                } else {
+                    return ParsedCommand(
+                        type = CommandType.CLOSE_APP,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "NOT_FOUND",
+                        target = remainder,
+                        params = mapOf("query" to remainder),
+                        confidence = 0.8f,
+                        matchedRule = "close_app_not_found"
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun parseMinimizeCommand(rawText: String, norm: String): ParsedCommand? {
+        if (MINIMIZE_TRIGGERS.any { norm == it || norm.startsWith("$it ") }) {
+            return ParsedCommand(
+                type = CommandType.MINIMIZE_APP,
+                rawText = rawText,
+                normalizedText = norm,
+                action = "MINIMIZE",
+                confidence = 1.0f,
+                matchedRule = "minimize_app"
+            )
+        }
+        return null
     }
 
     private fun parseVolumeCommand(rawText: String, norm: String): ParsedCommand? {
@@ -141,7 +242,7 @@ object CommandParser {
                 rawText = rawText,
                 normalizedText = norm,
                 action = "DOWN",
-                params = mapOf("delta" to -1),
+                params = mapOf("delta" to 1),
                 confidence = 1.0f,
                 matchedRule = "volume_down"
             )
@@ -153,7 +254,7 @@ object CommandParser {
     private fun parseMediaCommand(rawText: String, norm: String): ParsedCommand? {
         // PAUSE
         val pauseTriggers = listOf(
-            "пауза", "стоп", "останови", "остановить", "поставь на паузу", "замри"
+            "пауза", "поставь на паузу", "на паузу", "стоп видео", "приостанови", "останови видео", "стоп"
         )
         if (pauseTriggers.any { norm == it }) {
             return ParsedCommand(
@@ -166,9 +267,9 @@ object CommandParser {
             )
         }
 
-        // PLAY
+        // PLAY / RESUME
         val playTriggers = listOf(
-            "плей", "играй", "продолжить", "возобнови", "возобновить", "пуск", "играть"
+            "продолжи", "продолжить", "играй", "плей", "play", "воспроизведение", "запусти видео"
         )
         if (playTriggers.any { norm == it }) {
             return ParsedCommand(
@@ -183,8 +284,8 @@ object CommandParser {
 
         // NEXT
         val nextTriggers = listOf(
-            "следующий", "следующая", "следующее", "дальше", "вперед",
-            "следующий трек", "следующее видео", "следующая песня", "переключи вперед"
+            "следующий", "следующая", "следующее", "вперед", "следующий трек",
+            "следующая серия", "следующее видео", "переключи вперед"
         )
         if (nextTriggers.any { norm == it }) {
             return ParsedCommand(
@@ -233,7 +334,7 @@ object CommandParser {
         }
 
         val backTriggers = listOf(
-            "назад", "вернись назад", "вернись", "назад в меню"
+            "назад", "вернись назад", "вернись", "назад в меню", "шаг назад"
         )
         if (backTriggers.any { norm == it }) {
             return ParsedCommand(
@@ -250,37 +351,82 @@ object CommandParser {
     }
 
     private fun parseAppLaunchCommand(rawText: String, norm: String): ParsedCommand? {
-        // Direct app name match
-        AppRegistry.findAppByAlias(norm)?.let { app ->
-            return ParsedCommand(
-                type = CommandType.OPEN_APP,
-                rawText = rawText,
-                normalizedText = norm,
-                action = "OPEN",
-                target = app.key,
-                params = mapOf("displayName" to app.displayName),
-                confidence = 0.95f,
-                matchedRule = "direct_app_alias"
-            )
-        }
-
-        // Prefix-based launch: "открой ...", "запусти ...", "включи ..."
-        for (prefix in LAUNCH_PREFIXES) {
+        // 1. Prefix-based launch: "открой ...", "запусти ...", "включи ..."
+        for (prefix in OPEN_PREFIXES) {
             if (norm.startsWith("$prefix ")) {
                 val remainder = norm.substring(prefix.length).trim()
-                AppRegistry.findAppByAlias(remainder)?.let { app ->
+                if (remainder.isEmpty() || remainder == "приложение") {
+                    return ParsedCommand(
+                        type = CommandType.UNKNOWN,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "INCOMPLETE_OPEN",
+                        confidence = 0.0f,
+                        matchedRule = "incomplete_open"
+                    )
+                }
+
+                val match = AppRegistry.findApp(remainder)
+                if (match != null) {
                     return ParsedCommand(
                         type = CommandType.OPEN_APP,
                         rawText = rawText,
                         normalizedText = norm,
                         action = "OPEN",
-                        target = app.key,
-                        params = mapOf("displayName" to app.displayName),
-                        confidence = 1.0f,
+                        target = match.app.key,
+                        params = mapOf(
+                            "displayName" to match.app.appLabel,
+                            "packageName" to match.app.packageName,
+                            "matchedAlias" to match.matchedAlias,
+                            "matchScore" to match.score,
+                            "isAmbiguous" to match.isAmbiguous
+                        ),
+                        confidence = match.score,
                         matchedRule = "prefixed_app_alias"
                     )
                 }
+
+                // If not matched to an installed app, check if it's a search/media query (e.g. "включи классическую музыку")
+                val searchCandidate = parseSearchCommand(rawText, norm)
+                if (searchCandidate != null) {
+                    return searchCandidate
+                }
+
+                // If explicitly requested as application ("открой/запусти приложение ...") or specific app launch verbs
+                if (prefix.contains("приложение") || prefix.startsWith("открой") || prefix.startsWith("запусти")) {
+                    return ParsedCommand(
+                        type = CommandType.OPEN_APP,
+                        rawText = rawText,
+                        normalizedText = norm,
+                        action = "NOT_FOUND",
+                        target = remainder,
+                        params = mapOf("query" to remainder),
+                        confidence = 0.7f,
+                        matchedRule = "open_app_not_found"
+                    )
+                }
             }
+        }
+
+        // 2. Direct app name match without any prefix (ONLY for standalone high-confidence app names)
+        val directMatch = AppRegistry.findApp(norm)
+        if (directMatch != null && directMatch.score >= 0.95f) {
+            return ParsedCommand(
+                type = CommandType.OPEN_APP,
+                rawText = rawText,
+                normalizedText = norm,
+                action = "OPEN",
+                target = directMatch.app.key,
+                params = mapOf(
+                    "displayName" to directMatch.app.appLabel,
+                    "packageName" to directMatch.app.packageName,
+                    "matchedAlias" to directMatch.matchedAlias,
+                    "matchScore" to directMatch.score,
+                    "isAmbiguous" to directMatch.isAmbiguous
+                ),
+                confidence = directMatch.score,
+                matchedRule = "direct_app_alias"
+            )
         }
 
         return null
@@ -305,11 +451,11 @@ object CommandParser {
             }
         }
 
-        // Topical queries: "фильмы с ...", "фильм ...", "сериал ...", "прогноз погоды ...", "погода ..."
+        // Topical queries: "фильмы с ...", "сериал ...", "прогноз погоды ...", "включи музыку ..."
         val topicalPrefixes = listOf(
             "фильмы с", "фильмы про", "фильмы", "фильм", "сериал", "кино",
             "прогноз погоды", "погода", "что такое", "кто такой", "музыка",
-            "включи классическую музыку", "включи музыку", "включи песню"
+            "включи классическую музыку", "включи музыку", "включи песню", "включи трек"
         )
         for (tp in topicalPrefixes) {
             if (norm == tp || norm.startsWith("$tp ")) {

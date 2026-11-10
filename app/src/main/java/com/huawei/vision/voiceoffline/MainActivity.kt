@@ -424,6 +424,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initServices() {
+        AppRegistry.init(applicationContext)
         audioCapture = RemoteAudioCapture(this)
         sttEngine = SttEngine(this)
         commandRouter = CommandRouter(this)

@@ -1,9 +1,12 @@
 package com.huawei.vision.voiceoffline
 
+import android.app.ActivityManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 
@@ -19,6 +22,8 @@ class CommandExecutor(private val context: Context) {
         return try {
             val result = when (cmd.type) {
                 CommandType.OPEN_APP -> executeOpenApp(cmd)
+                CommandType.CLOSE_APP -> executeCloseApp(cmd)
+                CommandType.MINIMIZE_APP -> executeMinimizeApp(cmd)
                 CommandType.VOLUME_CONTROL -> executeVolume(cmd)
                 CommandType.MEDIA_CONTROL -> executeMedia(cmd)
                 CommandType.SEARCH -> executeSearch(cmd)
@@ -52,6 +57,18 @@ class CommandExecutor(private val context: Context) {
     }
 
     private fun executeOpenApp(cmd: ParsedCommand): CommandResult {
+        // If parser already determined app was not found
+        if (cmd.action == "NOT_FOUND") {
+            val query = (cmd.params["query"] as? String) ?: cmd.target ?: cmd.rawText
+            return CommandResult(
+                command = cmd,
+                success = false,
+                statusMessage = "Приложение '$query' не найдено на телевизоре",
+                executedAction = "APP_NOT_FOUND",
+                error = "PACKAGE_NOT_INSTALLED"
+            )
+        }
+
         val appKey = cmd.target ?: return CommandResult(
             command = cmd,
             success = false,
@@ -59,79 +76,157 @@ class CommandExecutor(private val context: Context) {
             error = "MISSING_APP_TARGET"
         )
 
-        val appAlias = AppRegistry.apps.firstOrNull { it.key == appKey }
-            ?: return CommandResult(
-                command = cmd,
-                success = false,
-                statusMessage = "Неизвестный идентификатор приложения: $appKey",
-                error = "APP_NOT_REGISTERED"
-            )
+        // Find in DynamicAppRegistry
+        val appMatch = AppRegistry.findApp(appKey)
+        val app = appMatch?.app ?: AppRegistry.getAllApps().firstOrNull { it.key == appKey }
 
-        // For settings: prefer ACTION_SETTINGS directly
-        if (appAlias.key == "settings" || (appAlias.fallbackAction != null && appAlias.candidatePackages.isEmpty())) {
+        val targetPkg = (cmd.params["packageName"] as? String) ?: app?.packageName
+        val displayName = (cmd.params["displayName"] as? String) ?: app?.appLabel ?: appKey
+
+        // Check ambiguity
+        if (cmd.params["isAmbiguous"] == true || appMatch?.isAmbiguous == true) {
+            Log.w(TAG, "Ambiguous app match for query '$appKey'")
+        }
+
+        // 1. Settings special handling
+        if (appKey == "settings" || app?.fallbackAction == Settings.ACTION_SETTINGS) {
             try {
-                val intent = Intent(appAlias.fallbackAction ?: android.provider.Settings.ACTION_SETTINGS).apply {
+                val intent = Intent(Settings.ACTION_SETTINGS).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(intent)
                 return CommandResult(
                     command = cmd,
                     success = true,
-                    statusMessage = "Открыты настройки системы (${appAlias.displayName})",
+                    statusMessage = "Открыты настройки системы ($displayName)",
                     executedAction = "START_SETTINGS_ACTION",
-                    targetPackage = "settings"
+                    targetPackage = targetPkg ?: "com.android.tv.settings"
                 )
             } catch (e: Exception) {
-                Log.w(TAG, "Direct fallback launch failed for ${appAlias.key}", e)
+                Log.w(TAG, "Failed to launch Settings via ACTION_SETTINGS", e)
             }
         }
 
-        val resolvedPkg = AppRegistry.resolveInstalledPackage(context, appAlias)
-
-        if (resolvedPkg != null) {
+        // 2. Launch via PackageManager launch intent
+        if (targetPkg != null) {
             try {
-                val launchIntent = context.packageManager.getLaunchIntentForPackage(resolvedPkg)
+                val pm = context.packageManager
+                val launchIntent = pm.getLaunchIntentForPackage(targetPkg)
                 if (launchIntent != null) {
                     launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(launchIntent)
                     return CommandResult(
                         command = cmd,
                         success = true,
-                        statusMessage = "Запущено приложение: ${appAlias.displayName} ($resolvedPkg)",
+                        statusMessage = "Запущено приложение: $displayName ($targetPkg)",
                         executedAction = "START_ACTIVITY",
-                        targetPackage = resolvedPkg
+                        targetPackage = targetPkg
+                    )
+                }
+
+                // 2b. If activityName is known (e.g. from Leanback query), launch explicit component
+                if (app?.activityName != null) {
+                    val explicitIntent = Intent(Intent.ACTION_MAIN).apply {
+                        component = ComponentName(targetPkg, app.activityName)
+                        addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(explicitIntent)
+                    return CommandResult(
+                        command = cmd,
+                        success = true,
+                        statusMessage = "Запущен компонент: $displayName (${app.activityName})",
+                        executedAction = "START_COMPONENT",
+                        targetPackage = targetPkg
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Failed to launch package $resolvedPkg, trying fallback action", e)
+                Log.w(TAG, "Failed to launch package $targetPkg", e)
             }
         }
 
-        // Fallback action if package launch failed or is restricted
-        if (appAlias.fallbackAction != null) {
+        // 3. Fallback action if defined
+        val fallback = app?.fallbackAction
+        if (fallback != null) {
             try {
-                val fallbackIntent = Intent(appAlias.fallbackAction).apply {
+                val fallbackIntent = Intent(fallback).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(fallbackIntent)
                 return CommandResult(
                     command = cmd,
                     success = true,
-                    statusMessage = "Открыто системное действие: ${appAlias.displayName}",
+                    statusMessage = "Открыто системное действие: $displayName",
                     executedAction = "START_FALLBACK_ACTION",
-                    targetPackage = resolvedPkg
+                    targetPackage = targetPkg
                 )
             } catch (e: Exception) {
-                Log.w(TAG, "Fallback action failed: ${appAlias.fallbackAction}", e)
+                Log.w(TAG, "Fallback action failed: $fallback", e)
             }
         }
 
         return CommandResult(
             command = cmd,
             success = false,
-            statusMessage = "Приложение '${appAlias.displayName}' не установлено на этом телевизоре",
+            statusMessage = "Приложение '$displayName' не установлено на этом телевизоре",
             error = "PACKAGE_NOT_INSTALLED",
-            targetPackage = appAlias.candidatePackages.firstOrNull()
+            targetPackage = targetPkg
+        )
+    }
+
+    private fun executeCloseApp(cmd: ParsedCommand): CommandResult {
+        // STRICT PROHIBITION: Under NO circumstances should CLOSE_APP launch the app!
+        val displayName = (cmd.params["displayName"] as? String) ?: cmd.target ?: "приложения"
+        val pkg = (cmd.params["packageName"] as? String)
+
+        if (cmd.action == "NOT_FOUND") {
+            val query = (cmd.params["query"] as? String) ?: cmd.target ?: cmd.rawText
+            return CommandResult(
+                command = cmd,
+                success = false,
+                statusMessage = "Приложение '$query' не найдено для закрытия",
+                executedAction = "CLOSE_NOT_FOUND",
+                error = "PACKAGE_NOT_FOUND"
+            )
+        }
+
+        if (pkg != null) {
+            try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                am.killBackgroundProcesses(pkg)
+            } catch (e: Exception) {
+                Log.w(TAG, "killBackgroundProcesses failed for $pkg", e)
+            }
+        }
+
+        // Honest explanation: Android security policy restricts 3rd-party apps from force-stopping foreground apps.
+        val msg = if (cmd.action == "CLOSE_CURRENT") {
+            "Закрытие текущего приложения ограничено политикой Android. Скажите 'домой' или 'сверни'."
+        } else {
+            "Закрытие '$displayName' ограничено политикой безопасности Android (требуются права root/системы). Скажите 'домой' или 'сверни'."
+        }
+
+        return CommandResult(
+            command = cmd,
+            success = false,
+            statusMessage = msg,
+            executedAction = "UNSUPPORTED_CLOSE_APP",
+            targetPackage = pkg,
+            error = "SECURITY_POLICY_RESTRICTION"
+        )
+    }
+
+    private fun executeMinimizeApp(cmd: ParsedCommand): CommandResult {
+        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(homeIntent)
+        return CommandResult(
+            command = cmd,
+            success = true,
+            statusMessage = "Приложение свёрнуто (Главный экран)",
+            executedAction = "MINIMIZE_TO_HOME"
         )
     }
 
@@ -207,7 +302,6 @@ class CommandExecutor(private val context: Context) {
     }
 
     private fun executeSearch(cmd: ParsedCommand): CommandResult {
-        // Requirement 8: For SEARCH extract query text and return structured result without integrating into 3rd party apps yet
         val query = (cmd.params["query"] as? String) ?: cmd.rawText
         val searchType = (cmd.params["searchType"] as? String) ?: "general"
 

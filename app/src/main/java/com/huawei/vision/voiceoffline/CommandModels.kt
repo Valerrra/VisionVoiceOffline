@@ -7,10 +7,12 @@ enum class OperatingMode {
 
 enum class CommandType {
     OPEN_APP,
+    CLOSE_APP,
+    MINIMIZE_APP,
+    SYSTEM_NAV,
     VOLUME_CONTROL,
     MEDIA_CONTROL,
     SEARCH,
-    SYSTEM_NAV,
     DICTATION_TEXT,
     UNKNOWN
 }
@@ -36,10 +38,20 @@ data class CommandResult(
     val executionTimeMs: Long = 0
 )
 
-data class AppAlias(
+data class InstalledApp(
     val key: String,
-    val displayName: String,
-    val aliases: List<String>,
-    val candidatePackages: List<String>,
+    val packageName: String,
+    val activityName: String?,
+    val appLabel: String,
+    val aliases: Set<String>,
+    val isSystemApp: Boolean = false,
+    val isUserCustom: Boolean = false,
     val fallbackAction: String? = null
+)
+
+data class AppMatch(
+    val app: InstalledApp,
+    val matchedAlias: String,
+    val score: Float,
+    val isAmbiguous: Boolean = false
 )
