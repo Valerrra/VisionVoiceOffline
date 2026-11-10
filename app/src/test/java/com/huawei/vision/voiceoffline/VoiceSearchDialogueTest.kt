@@ -172,14 +172,14 @@ class VoiceSearchDialogueTest {
         assertEquals(listOf("LazyMedia Deluxe"), rejectRes.availableOptions)
     }
 
-    // --- Scenario 4: "Найди на Ютубе Варламова" -> Direct YouTube search ---
+    // --- Scenario 4: "Найди на Ютубе осень в Норвегии 4К" -> Direct YouTube search ---
     @Test
     fun testScenario4_DirectYouTubeSearch() {
-        val parsed = CommandParser.parse("Найди на Ютубе Варламова")
+        val parsed = CommandParser.parse("Найди на Ютубе осень в Норвегии 4К")
         assertEquals(CommandType.SEARCH, parsed.type)
-        val resolved = SearchTargetResolver.resolve("Найди на Ютубе Варламова")
+        val resolved = SearchTargetResolver.resolve("Найди на Ютубе осень в Норвегии 4К")
         assertEquals("youtube", resolved.targetAppKey)
-        assertEquals("варламова", resolved.cleanQuery)
+        assertEquals("осень в норвегии 4к", resolved.cleanQuery)
     }
 
     // --- Scenario 5: "Найди сериал Доктор Хаус" (no active app) -> Target Clarification ---
@@ -286,7 +286,7 @@ class VoiceSearchDialogueTest {
     // --- Scenario 14: Cancellation ---
     @Test
     fun testScenario14_Cancellation() {
-        DialogueManager.startSearchDialogue("Варламов", "Найди Варламов", dummyContext)
+        DialogueManager.startSearchDialogue("осень в Норвегии 4К", "Найди осень в Норвегии 4К", dummyContext)
         val cancelRes = DialogueManager.handleInput("отмена", dummyContext)
 
         assertTrue(cancelRes.handled)

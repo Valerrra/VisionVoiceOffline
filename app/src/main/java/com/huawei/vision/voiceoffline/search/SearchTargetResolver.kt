@@ -150,9 +150,9 @@ object SearchTargetResolver {
     /**
      * Resolves target and cleans user query from a full voice sentence.
      * Examples:
-     * - "найди на ютубе варламова" -> target: youtube, query: "варламова"
-     * - "поищи варламова в ютубе" -> target: youtube, query: "варламова"
-     * - "ютуб найди варламова" -> target: youtube, query: "варламова"
+     * - "найди на ютубе осень в норвегии 4к" -> target: youtube, query: "осень в норвегии 4к"
+     * - "поищи осень в норвегии 4к в ютубе" -> target: youtube, query: "осень в норвегии 4к"
+     * - "ютуб найди осень в норвегии 4к" -> target: youtube, query: "осень в норвегии 4к"
      * - "открой лэйзи медиа и найди доктор хаус" -> target: lazymedia, query: "доктор хаус"
      * - "найди сериал доктор хаус" -> target: null, query: "сериал доктор хаус"
      */
@@ -211,7 +211,7 @@ object SearchTargetResolver {
             }
         }
 
-        // 4. Check for target in prepositional phrase at start of query: "на ютубе варламова"
+        // 4. Check for target in prepositional phrase at start of query: "на ютубе осень в норвегии 4к"
         for (pattern in TARGET_PATTERNS) {
             for (prep in pattern.prepositionalPhrases) {
                 if (activeQuery.startsWith("$prep ")) {
@@ -227,7 +227,7 @@ object SearchTargetResolver {
             }
         }
 
-        // 5. Check for target in prepositional phrase at END of query: "варламова в ютубе", "доктор хаус в лэйзи медиа"
+        // 5. Check for target in prepositional phrase at END of query: "осень в норвегии 4к в ютубе", "доктор хаус в лэйзи медиа"
         for (pattern in TARGET_PATTERNS) {
             for (prep in pattern.prepositionalPhrases) {
                 if (activeQuery.endsWith(" $prep")) {
