@@ -7,8 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -53,6 +55,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvMetricTotalTime: TextView
     private lateinit var tvMetricRam: TextView
     private lateinit var tvMetricCpu: TextView
+
+    // M4.5 Overlay Service views
+    private lateinit var tvServiceStatusBadge: TextView
+    private lateinit var btnServiceToggle: Button
+    private lateinit var btnOverlayPerm: Button
+    private lateinit var btnBootToggle: Button
+    private lateinit var btnMinimize: Button
+    private lateinit var prefs: VoiceOverlayPreferences
 
     // Control buttons
     private lateinit var btnHoldRecord: Button
@@ -99,11 +109,11 @@ class MainActivity : AppCompatActivity() {
             val action = intent?.action ?: return
             when (action) {
                 ACTION_VOICE_ASSIST_KEY_DOWN -> {
-                    log("Broadcast received: VOICE_ASSIST_KEY_DOWN")
+                    log("Broadcast received in Activity: VOICE_ASSIST_KEY_DOWN")
                     handleVoiceStart("Huawei Broadcast KEY_DOWN")
                 }
                 ACTION_VOICE_ASSIST_KEY_UP -> {
-                    log("Broadcast received: VOICE_ASSIST_KEY_UP")
+                    log("Broadcast received in Activity: VOICE_ASSIST_KEY_UP")
                     handleVoiceStop("Huawei Broadcast KEY_UP")
                 }
             }
@@ -119,6 +129,13 @@ class MainActivity : AppCompatActivity() {
         registerVoiceKeyReceivers()
         updatePhraseCard()
         checkAudioPermission()
+        checkOverlayPermission()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateServiceViews()
+        setupTelemetryListener()
     }
 
     private fun initViews() {
@@ -142,6 +159,13 @@ class MainActivity : AppCompatActivity() {
         tvMetricRam = findViewById(R.id.tvMetricRam)
         tvMetricCpu = findViewById(R.id.tvMetricCpu)
 
+        tvServiceStatusBadge = findViewById(R.id.tvServiceStatusBadge)
+        btnServiceToggle = findViewById(R.id.btnServiceToggle)
+        btnOverlayPerm = findViewById(R.id.btnOverlayPerm)
+        btnBootToggle = findViewById(R.id.btnBootToggle)
+        btnMinimize = findViewById(R.id.btnMinimize)
+        prefs = VoiceOverlayPreferences(this)
+
         btnHoldRecord = findViewById(R.id.btnHoldRecord)
         btnClear = findViewById(R.id.btnClear)
         btnTestWav0 = findViewById(R.id.btnTestWav0)
@@ -161,6 +185,86 @@ class MainActivity : AppCompatActivity() {
         scrollLog = findViewById(R.id.scrollLog)
 
         setupButtons()
+        updateServiceViews()
+    }
+
+    private fun updateServiceViews() {
+        val running = VoiceOverlayService.isRunning
+        tvServiceStatusBadge.text = if (running) "АКТИВЕН" else "ВЫКЛЮЧЕН"
+        tvServiceStatusBadge.setTextColor(
+            ContextCompat.getColor(this, if (running) R.color.accent_green else R.color.text_secondary)
+        )
+
+        btnServiceToggle.text = if (running) "ОСТАНОВИТЬ СЛУЖБУ" else "ЗАПУСТИТЬ СЛУЖБУ"
+        btnServiceToggle.setTextColor(
+            ContextCompat.getColor(this, if (running) R.color.accent_red else R.color.accent_green)
+        )
+
+        val hasOverlay = Settings.canDrawOverlays(this)
+        btnOverlayPerm.text = if (hasOverlay) "Оверлей: ДА" else "Оверлей: ЗАПРОС"
+        btnOverlayPerm.setTextColor(
+            ContextCompat.getColor(this, if (hasOverlay) R.color.accent_green else R.color.accent_yellow)
+        )
+
+        val bootEnabled = prefs.isBootAutostartEnabled
+        btnBootToggle.text = if (bootEnabled) "Автозапуск: ВКЛ" else "Автозапуск: ВЫКЛ"
+        btnBootToggle.setTextColor(
+            ContextCompat.getColor(this, if (bootEnabled) R.color.accent_green else R.color.text_secondary)
+        )
+    }
+
+    private fun setupTelemetryListener() {
+        if (VoiceOverlayService.isRunning) {
+            VoiceOverlayService.telemetryListener = object : ServiceTelemetryListener {
+                override fun onSessionStarted(source: String) {
+                    runOnUiThread {
+                        tvStatusBadge.text = "ЗАПИСЬ (SERVICE)"
+                        tvStatusBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_red))
+                        tvKeyIndicator.text = "Кнопка: НАЖАТА ($source)"
+                        tvKeyIndicator.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_green))
+                        tvRecognizedText.text = "Слушаю..."
+                    }
+                }
+
+                override fun onSessionFinished(metrics: SttMetrics, result: CommandResult?) {
+                    runOnUiThread {
+                        tvStatusBadge.text = "ЗАВЕРШЕНО (SERVICE)"
+                        tvStatusBadge.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_green))
+                        tvRecognizedText.text = metrics.finalTranscription
+                        tvMetricLatency.text = "${metrics.postReleaseLatencyMs} ms"
+                        tvMetricRtf.text = "%.3f".format(metrics.rtf)
+                        tvMetricDuration.text = "${metrics.audioDurationMs} ms"
+                        tvMetricTotalTime.text = "${metrics.totalDecodeDurationMs} ms"
+                        tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
+                        tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
+
+                        if (result != null) {
+                            displayCommandResult(result)
+                        }
+
+                        log("Служба оверлея обработала: '${metrics.finalTranscription}' (Latency: ${metrics.postReleaseLatencyMs} ms)")
+                    }
+                }
+
+                override fun onError(error: String) {
+                    runOnUiThread {
+                        log("Ошибка службы оверлея: $error")
+                    }
+                }
+
+                override fun onModelReady(ready: Boolean) {
+                    runOnUiThread {
+                        tvModelInfo.text = if (ready) "Модель: Zipformer RU (В службе)" else "Модель: Ошибка"
+                        tvModelInfo.setTextColor(
+                            ContextCompat.getColor(
+                                this@MainActivity,
+                                if (ready) R.color.accent_green else R.color.accent_red
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -178,6 +282,44 @@ class MainActivity : AppCompatActivity() {
                 btnModeToggle.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
                 log("Переключено в режим: КОМАНДЫ (выполнение активно)")
             }
+        }
+
+        // M4.5 Service Toggle
+        btnServiceToggle.setOnClickListener {
+            if (VoiceOverlayService.isRunning) {
+                log("Остановка службы оверлея по запросу пользователя...")
+                VoiceOverlayService.stop(this)
+                prefs.isServiceEnabled = false
+                updateServiceViews()
+                // Re-initialize standalone STT
+                initServices()
+            } else {
+                log("Запуск службы оверлея по запросу пользователя...")
+                // Free local STT resources before starting service to save RAM
+                sttEngine.release()
+                VoiceOverlayService.start(this)
+                prefs.isServiceEnabled = true
+                updateServiceViews()
+                setupTelemetryListener()
+            }
+        }
+
+        // M4.5 Overlay Permission button
+        btnOverlayPerm.setOnClickListener {
+            checkAndRequestOverlayPermission()
+        }
+
+        // M4.5 Boot Autostart toggle
+        btnBootToggle.setOnClickListener {
+            prefs.isBootAutostartEnabled = !prefs.isBootAutostartEnabled
+            updateServiceViews()
+            log("Настройка автозапуска при загрузке: ${if (prefs.isBootAutostartEnabled) "ВКЛЮЧЕН" else "ВЫКЛЮЧЕН"}")
+        }
+
+        // M4.5 Minimize to test overlay over third-party apps
+        btnMinimize.setOnClickListener {
+            log("Сворачивание приложения в фон. Проверьте оверлей поверх Lampa/YouTube...")
+            moveTaskToBack(true)
         }
 
         // UI Touch / Click hold support for testing
@@ -240,6 +382,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAndRequestOverlayPermission() {
+        if (Settings.canDrawOverlays(this)) {
+            log("Разрешение SYSTEM_ALERT_WINDOW уже предоставлено")
+            updateServiceViews()
+        } else {
+            log("Открытие настроек для предоставления разрешения SYSTEM_ALERT_WINDOW...")
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                log("Не удалось открыть настройки оверлея: ${e.message}")
+            }
+        }
+    }
+
+    private fun checkOverlayPermission() {
+        val granted = Settings.canDrawOverlays(this)
+        log("Статус разрешения SYSTEM_ALERT_WINDOW: ${if (granted) "ПРЕДОСТАВЛЕНО" else "НЕ ПРЕДОСТАВЛЕНО"}")
+        if (!granted) {
+            log("Внимание: для показа плавающей панели в фоне требуется разрешение на наложение поверх окон")
+        }
+    }
+
     private fun simulateCommand(phrase: String) {
         log("Симуляция команды: '$phrase'")
         tvRecognizedText.text = phrase
@@ -259,6 +427,14 @@ class MainActivity : AppCompatActivity() {
         audioCapture = RemoteAudioCapture(this)
         sttEngine = SttEngine(this)
         commandRouter = CommandRouter(this)
+
+        if (VoiceOverlayService.isRunning) {
+            tvModelInfo.text = "Модель: Zipformer RU (В службе)"
+            tvModelInfo.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            log("Фоновая служба оверлея уже запущена и удерживает модель")
+            setupTelemetryListener()
+            return
+        }
 
         log("Инициализация Vosk Zipformer Small RU (INT8)...")
         tvModelInfo.text = "Модель: Загрузка INT8..."
@@ -282,9 +458,10 @@ class MainActivity : AppCompatActivity() {
         val filter = IntentFilter().apply {
             addAction(ACTION_VOICE_ASSIST_KEY_DOWN)
             addAction(ACTION_VOICE_ASSIST_KEY_UP)
+            priority = 500
         }
         registerReceiver(voiceKeyReceiver, filter)
-        log("Зарегистрирован BroadcastReceiver для Huawei Voice Assist")
+        log("Зарегистрирован BroadcastReceiver для Huawei Voice Assist в активности")
     }
 
     private fun checkAudioPermission() {
@@ -327,6 +504,11 @@ class MainActivity : AppCompatActivity() {
 
     @Synchronized
     private fun handleVoiceStart(source: String) {
+        if (VoiceOverlayService.isRunning) {
+            // When VoiceOverlayService is running, it handles PTT directly and renders the overlay
+            return
+        }
+
         val now = SystemClock.elapsedRealtime()
         if (sessionState != SessionState.IDLE) {
             log("Игнорирование повторного KEY_DOWN ($source): текущее состояние=$sessionState")
@@ -396,6 +578,11 @@ class MainActivity : AppCompatActivity() {
 
     @Synchronized
     private fun handleVoiceStop(source: String) {
+        if (VoiceOverlayService.isRunning) {
+            // Handled by service
+            return
+        }
+
         if (sessionState != SessionState.RECORDING) {
             log("Игнорирование KEY_UP ($source): текущее состояние=$sessionState")
             return
@@ -449,7 +636,7 @@ class MainActivity : AppCompatActivity() {
                     tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
                     tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
 
-                    // M4: Execute Voice Command via CommandRouter
+                    // Execute Voice Command via CommandRouter
                     var normalizedCmd = ""
                     var chosenIntent = "NONE"
                     if (recognized.isNotEmpty() && !recognized.startsWith("(")) {

@@ -362,4 +362,17 @@ class CommandRouterTest {
         assertEquals(180L, metrics.postReleaseLatencyMs)
         assertEquals(diag, metrics.diagnostics)
     }
+
+    // --- 9. M4.5 Overlay State Machine & Autostart Tests ---
+
+    @Test
+    fun testVoiceOverlayStateTransitions() {
+        val states = VoiceOverlayState.values()
+        assertEquals(5, states.size)
+        assertTrue(states.contains(VoiceOverlayState.IDLE))
+        assertTrue(states.contains(VoiceOverlayState.LISTENING))
+        assertTrue(states.contains(VoiceOverlayState.PROCESSING))
+        assertTrue(states.contains(VoiceOverlayState.RESULT))
+        assertTrue(states.contains(VoiceOverlayState.ERROR))
+    }
 }
