@@ -67,33 +67,57 @@ class CommandExecutor(private val context: Context) {
                 error = "APP_NOT_REGISTERED"
             )
 
-        val resolvedPkg = AppRegistry.resolveInstalledPackage(context, appAlias)
-
-        if (resolvedPkg != null) {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage(resolvedPkg)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(launchIntent)
+        // For settings: prefer ACTION_SETTINGS directly
+        if (appAlias.key == "settings" || (appAlias.fallbackAction != null && appAlias.candidatePackages.isEmpty())) {
+            try {
+                val intent = Intent(appAlias.fallbackAction ?: android.provider.Settings.ACTION_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
                 return CommandResult(
                     command = cmd,
                     success = true,
-                    statusMessage = "Запущено приложение: ${appAlias.displayName} ($resolvedPkg)",
-                    executedAction = "START_ACTIVITY",
-                    targetPackage = resolvedPkg
+                    statusMessage = "Открыты настройки системы (${appAlias.displayName})",
+                    executedAction = "START_SETTINGS_ACTION",
+                    targetPackage = "settings"
                 )
+            } catch (e: Exception) {
+                Log.w(TAG, "Direct fallback launch failed for ${appAlias.key}", e)
             }
         }
 
-        // Fallback for system settings if explicit package launch is restricted
+        val resolvedPkg = AppRegistry.resolveInstalledPackage(context, appAlias)
+
+        if (resolvedPkg != null) {
+            try {
+                val launchIntent = context.packageManager.getLaunchIntentForPackage(resolvedPkg)
+                if (launchIntent != null) {
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(launchIntent)
+                    return CommandResult(
+                        command = cmd,
+                        success = true,
+                        statusMessage = "Запущено приложение: ${appAlias.displayName} ($resolvedPkg)",
+                        executedAction = "START_ACTIVITY",
+                        targetPackage = resolvedPkg
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to launch package $resolvedPkg, trying fallback action", e)
+            }
+        }
+
+        // Fallback action if package launch failed or is restricted
         if (appAlias.fallbackAction != null) {
             try {
-                val fallbackIntent = Intent(appAlias.fallbackAction)
-                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                val fallbackIntent = Intent(appAlias.fallbackAction).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
                 context.startActivity(fallbackIntent)
                 return CommandResult(
                     command = cmd,
                     success = true,
-                    statusMessage = "Открыто действие: ${appAlias.displayName} (${appAlias.fallbackAction})",
+                    statusMessage = "Открыто системное действие: ${appAlias.displayName}",
                     executedAction = "START_FALLBACK_ACTION",
                     targetPackage = resolvedPkg
                 )

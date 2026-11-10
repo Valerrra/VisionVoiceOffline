@@ -7,6 +7,7 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.SystemClock
 import android.util.Log
 import kotlin.math.abs
 import kotlin.math.log10
@@ -18,12 +19,32 @@ class RemoteAudioCapture(private val context: Context) {
         private const val TAG = "RemoteAudioCapture"
         private const val SAMPLE_RATE = 16000
         private const val CHUNK_SIZE = 512 // 32 ms chunks for streaming STT
+        const val DEFAULT_TAIL_DRAIN_MS = 150L // Allow Bluetooth BLE/SBC in-flight audio to arrive
     }
 
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
+
     @Volatile
     private var isRecording = false
+
+    @Volatile
+    private var isDrainRequested = false
+
+    @Volatile
+    private var drainDeadlineMs = 0L
+
+    @Volatile
+    private var drainCallback: ((totalSamplesRead: Long, timeFirstChunkMs: Long, timeLastChunkMs: Long, tailChunksCount: Int) -> Unit)? = null
+
+    @Volatile
+    private var timeFirstChunkMs = 0L
+
+    @Volatile
+    private var timeLastChunkMs = 0L
+
+    @Volatile
+    private var totalSamplesRead = 0L
 
     data class DeviceInfoSummary(
         val id: Int,
@@ -67,6 +88,12 @@ class RemoteAudioCapture(private val context: Context) {
         }
 
         try {
+            timeFirstChunkMs = 0L
+            timeLastChunkMs = 0L
+            totalSamplesRead = 0L
+            isDrainRequested = false
+            drainCallback = null
+
             val targetDevice = findBackMicDevice()
             val minBufSize = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
@@ -127,29 +154,107 @@ class RemoteAudioCapture(private val context: Context) {
 
             recordingThread = Thread({
                 val shortBuffer = ShortArray(CHUNK_SIZE)
-                while (isRecording) {
-                    val readCount = record.read(shortBuffer, 0, CHUNK_SIZE)
-                    if (readCount > 0) {
-                        val floatBuffer = FloatArray(readCount)
-                        var sumSq = 0.0
-                        var peak = 0
+                var tailChunksCount = 0
 
-                        for (i in 0 until readCount) {
-                            val sample = shortBuffer[i].toInt()
-                            val absVal = abs(sample)
-                            if (absVal > peak) peak = absVal
-                            sumSq += absVal * absVal
-                            floatBuffer[i] = sample / 32768.0f
+                try {
+                    while (isRecording) {
+                        if (isDrainRequested && SystemClock.elapsedRealtime() >= drainDeadlineMs) {
+                            Log.d(TAG, "Tail drain window elapsed ($DEFAULT_TAIL_DRAIN_MS ms). Stopping record loop.")
+                            break
                         }
 
-                        val rms = sqrt(sumSq / readCount)
-                        val rmsDb = if (rms > 0) 20 * log10(rms / 32768.0) else -96.0
+                        val readCount = record.read(shortBuffer, 0, CHUNK_SIZE)
+                        if (readCount > 0) {
+                            val now = SystemClock.elapsedRealtime()
+                            if (timeFirstChunkMs == 0L) {
+                                timeFirstChunkMs = now
+                            }
+                            timeLastChunkMs = now
+                            totalSamplesRead += readCount
 
-                        onAudioChunk(floatBuffer, rmsDb, peak)
-                    } else if (readCount < 0) {
-                        Log.e(TAG, "AudioRecord read error code: $readCount")
-                        break
+                            if (isDrainRequested) {
+                                tailChunksCount++
+                            }
+
+                            val floatBuffer = FloatArray(readCount)
+                            var sumSq = 0.0
+                            var peak = 0
+
+                            for (i in 0 until readCount) {
+                                val sample = shortBuffer[i].toInt()
+                                val absVal = abs(sample)
+                                if (absVal > peak) peak = absVal
+                                sumSq += absVal * absVal
+                                floatBuffer[i] = sample / 32768.0f
+                            }
+
+                            val rms = sqrt(sumSq / readCount)
+                            val rmsDb = if (rms > 0) 20 * log10(rms / 32768.0) else -96.0
+
+                            onAudioChunk(floatBuffer, rmsDb, peak)
+                        } else if (readCount < 0) {
+                            Log.e(TAG, "AudioRecord read error code: $readCount")
+                            break
+                        }
                     }
+
+                    // Stop hardware recording without destroying the AudioRecord buffer yet
+                    try {
+                        if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                            record.stop()
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error stopping AudioRecord", e)
+                    }
+
+                    // Drain any remaining non-blocking samples already queued in AudioRecord
+                    var consecutiveZeroes = 0
+                    while (consecutiveZeroes < 3) {
+                        val nbRead = record.read(shortBuffer, 0, CHUNK_SIZE, AudioRecord.READ_NON_BLOCKING)
+                        if (nbRead > 0) {
+                            tailChunksCount++
+                            totalSamplesRead += nbRead
+                            timeLastChunkMs = SystemClock.elapsedRealtime()
+
+                            val floatBuffer = FloatArray(nbRead)
+                            var sumSq = 0.0
+                            var peak = 0
+
+                            for (i in 0 until nbRead) {
+                                val sample = shortBuffer[i].toInt()
+                                val absVal = abs(sample)
+                                if (absVal > peak) peak = absVal
+                                sumSq += absVal * absVal
+                                floatBuffer[i] = sample / 32768.0f
+                            }
+
+                            val rms = sqrt(sumSq / nbRead)
+                            val rmsDb = if (rms > 0) 20 * log10(rms / 32768.0) else -96.0
+
+                            onAudioChunk(floatBuffer, rmsDb, peak)
+                            consecutiveZeroes = 0
+                        } else {
+                            consecutiveZeroes++
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Exception in recordingThread", e)
+                } finally {
+                    try {
+                        record.release()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error releasing AudioRecord", e)
+                    }
+
+                    audioRecord = null
+                    isRecording = false
+                    isDrainRequested = false
+                    recordingThread = null
+
+                    Log.i(TAG, "AudioRecord gracefully stopped. Samples read: $totalSamplesRead, tail chunks: $tailChunksCount")
+                    val cb = drainCallback
+                    drainCallback = null
+                    cb?.invoke(totalSamplesRead, timeFirstChunkMs, timeLastChunkMs, tailChunksCount)
                 }
             }, "RemoteAudioCaptureThread").apply { start() }
 
@@ -162,8 +267,33 @@ class RemoteAudioCapture(private val context: Context) {
         }
     }
 
+    /**
+     * Gracefully stops capture by allowing in-flight Bluetooth BLE/SBC audio frames
+     * to arrive for [tailDrainMs] milliseconds, drains the hardware AudioRecord buffer,
+     * releases resources, and invokes [onComplete].
+     */
+    fun stopCaptureGracefully(
+        tailDrainMs: Long = DEFAULT_TAIL_DRAIN_MS,
+        onComplete: (totalSamplesRead: Long, timeFirstChunkMs: Long, timeLastChunkMs: Long, tailChunksCount: Int) -> Unit
+    ) {
+        if (!isRecording) {
+            onComplete(totalSamplesRead, timeFirstChunkMs, timeLastChunkMs, 0)
+            return
+        }
+
+        drainCallback = onComplete
+        drainDeadlineMs = SystemClock.elapsedRealtime() + tailDrainMs
+        isDrainRequested = true
+        Log.i(TAG, "Graceful stop requested (tail drain window: ${tailDrainMs}ms)...")
+    }
+
+    /**
+     * Forceful immediate teardown (used on destroy or error).
+     */
     fun stopCapture() {
         isRecording = false
+        isDrainRequested = false
+        drainCallback = null
         recordingThread?.interrupt()
         recordingThread = null
 
@@ -178,7 +308,7 @@ class RemoteAudioCapture(private val context: Context) {
             }
         }
         audioRecord = null
-        Log.i(TAG, "AudioRecord stopped and released")
+        Log.i(TAG, "AudioRecord forcefully stopped and released")
     }
 
     fun isCapturing(): Boolean = isRecording

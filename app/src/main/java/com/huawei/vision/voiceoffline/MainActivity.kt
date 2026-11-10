@@ -80,8 +80,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioCapture: RemoteAudioCapture
     private lateinit var commandRouter: CommandRouter
 
+    enum class SessionState {
+        IDLE,
+        RECORDING,
+        FINALIZING
+    }
+
     @Volatile
-    private var isVoiceActive = false
+    private var sessionState = SessionState.IDLE
+    private var lastSessionEndTimeMs = 0L
     private var keyPressTimeMs = 0L
     private var currentPhraseIndex = 0
 
@@ -320,15 +327,24 @@ class MainActivity : AppCompatActivity() {
 
     @Synchronized
     private fun handleVoiceStart(source: String) {
-        if (isVoiceActive) return
+        val now = SystemClock.elapsedRealtime()
+        if (sessionState != SessionState.IDLE) {
+            log("Игнорирование повторного KEY_DOWN ($source): текущее состояние=$sessionState")
+            return
+        }
+
+        if (now - lastSessionEndTimeMs < 150) {
+            log("Игнорирование дребезга кнопки ($source): прошло только ${now - lastSessionEndTimeMs} ms с предыдущей сессии")
+            return
+        }
 
         if (!sttEngine.isReady) {
             log("Внимание: модель STT еще загружается, ожидайте...")
             return
         }
 
-        isVoiceActive = true
-        keyPressTimeMs = SystemClock.elapsedRealtime()
+        sessionState = SessionState.RECORDING
+        keyPressTimeMs = now
 
         runOnUiThread {
             tvStatusBadge.text = "ЗАПИСЬ И РЕЧЬ"
@@ -346,7 +362,7 @@ class MainActivity : AppCompatActivity() {
             onAudioChunk = { samples, rmsDb, peak ->
                 sttEngine.feedSamples(samples) { partialText ->
                     runOnUiThread {
-                        if (isVoiceActive) {
+                        if (sessionState == SessionState.RECORDING) {
                             tvRecognizedText.text = partialText
                         }
                     }
@@ -365,71 +381,114 @@ class MainActivity : AppCompatActivity() {
                     log("ОШИБКА ЗАХВАТА: $errMsg")
                     tvStatusBadge.text = "ОШИБКА"
                     tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_red))
+                    sessionState = SessionState.IDLE
+                    lastSessionEndTimeMs = SystemClock.elapsedRealtime()
                 }
             }
         )
 
         if (!started) {
-            isVoiceActive = false
+            sessionState = SessionState.IDLE
+            lastSessionEndTimeMs = SystemClock.elapsedRealtime()
             log("Не удалось запустить захват звука!")
         }
     }
 
     @Synchronized
     private fun handleVoiceStop(source: String) {
-        if (!isVoiceActive) return
+        if (sessionState != SessionState.RECORDING) {
+            log("Игнорирование KEY_UP ($source): текущее состояние=$sessionState")
+            return
+        }
 
         val keyUpTimeMs = SystemClock.elapsedRealtime()
-        isVoiceActive = false
+        val pressDurationMs = keyUpTimeMs - keyPressTimeMs
+
+        if (pressDurationMs < 100) {
+            log("Короткое нажатие кнопки: ${pressDurationMs} ms ($source)")
+        }
+
+        sessionState = SessionState.FINALIZING
 
         runOnUiThread {
             tvKeyIndicator.text = "Кнопка: ОТПУЩЕНА"
             tvKeyIndicator.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-            tvStatusBadge.text = "ДЕКОДИРОВАНИЕ..."
+            tvStatusBadge.text = "СБОР ХВОСТА И ДЕКОДИРОВАНИЕ..."
             tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_yellow))
         }
 
-        log("Окончание удержания кнопки ($source)")
-        audioCapture.stopCapture()
+        log("Окончание удержания кнопки ($source, удержание ${pressDurationMs} ms). Запуск graceful drain...")
 
-        sttEngine.finishUtterance(keyUpTimeMs) { metrics ->
-            runOnUiThread {
-                tvStatusBadge.text = "ЗАВЕРШЕНО"
-                tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+        audioCapture.stopCaptureGracefully(RemoteAudioCapture.DEFAULT_TAIL_DRAIN_MS) { totalSamplesRead, timeFirstChunkMs, timeLastChunkMs, tailChunksCount ->
+            sttEngine.finishUtterance(
+                timeKeyDownMs = keyPressTimeMs,
+                timeKeyUpMs = keyUpTimeMs,
+                totalSamplesRead = totalSamplesRead,
+                timeFirstChunkMs = timeFirstChunkMs,
+                timeLastChunkMs = timeLastChunkMs,
+                tailChunksCount = tailChunksCount
+            ) { metrics ->
+                runOnUiThread {
+                    tvStatusBadge.text = "ЗАВЕРШЕНО"
+                    tvStatusBadge.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
 
-                val recognized = if (metrics.finalTranscription.isNotEmpty()) {
-                    metrics.finalTranscription
-                } else {
-                    "(Речь не распознана или тишина)"
+                    val rawStt = metrics.finalTranscription
+                    val recognized = if (rawStt.isNotEmpty()) {
+                        rawStt
+                    } else {
+                        "(Речь не распознана или тишина)"
+                    }
+
+                    tvRecognizedText.text = recognized
+                    tvRecognizedText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+
+                    tvMetricLatency.text = "${metrics.postReleaseLatencyMs} ms"
+                    tvMetricRtf.text = "%.3f".format(metrics.rtf)
+                    tvMetricDuration.text = "${metrics.audioDurationMs} ms"
+                    tvMetricTotalTime.text = "${metrics.totalDecodeDurationMs} ms"
+                    tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
+                    tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
+
+                    // M4: Execute Voice Command via CommandRouter
+                    var normalizedCmd = ""
+                    var chosenIntent = "NONE"
+                    if (recognized.isNotEmpty() && !recognized.startsWith("(")) {
+                        val cmdResult = commandRouter.route(recognized)
+                        normalizedCmd = cmdResult.command.normalizedText
+                        chosenIntent = cmdResult.command.type.name
+                        displayCommandResult(cmdResult)
+                    }
+
+                    val d = metrics.diagnostics.copy(
+                        normalizedCommand = normalizedCmd,
+                        chosenIntent = chosenIntent
+                    )
+
+                    val curPhrase = TestPhrases.items[currentPhraseIndex]
+                    log("════════════════════════════════════════")
+                    log("РЕЗУЛЬТАТ РАСПОЗНАВАНИЯ (M4.1):")
+                    log("  Ожидалось:              '${curPhrase.phrase}'")
+                    log("  Raw STT Final:          '${d.rawFinalStt}'")
+                    log("  Raw STT Partial:        '${d.rawPartialStt}'")
+                    log("  Normalized Command:     '${d.normalizedCommand}'")
+                    log("  Chosen Intent:          '${d.chosenIntent}'")
+                    log("  Post-Release Latency:   ${metrics.postReleaseLatencyMs} ms")
+                    log("  Audio Duration:         ${metrics.audioDurationMs} ms")
+                    log("  Decode Duration:        ${metrics.totalDecodeDurationMs} ms")
+                    log("  Real-Time Factor:       ${"%.3f".format(metrics.rtf)}")
+                    log("  Peak RAM (PSS):         ${"%.1f".format(metrics.peakRamMb)} MB")
+                    log("── ДИАГНОСТИЧЕСКАЯ ТЕЛЕМЕТРИЯ ───────────")
+                    log("  Time KeyDown / KeyUp:   ${d.timeKeyDownMs} / ${d.timeKeyUpMs} (diff: ${d.timeKeyUpMs - d.timeKeyDownMs} ms)")
+                    log("  Time First / Last PCM:  ${d.timeFirstChunkMs} / ${d.timeLastChunkMs} (audio span: ${if (d.timeLastChunkMs > 0 && d.timeFirstChunkMs > 0) d.timeLastChunkMs - d.timeFirstChunkMs else 0} ms)")
+                    log("  Samples Read / Fed:     ${d.totalSamplesRead} / ${d.totalSamplesFed} (dropped: ${d.totalSamplesRead - d.totalSamplesFed})")
+                    log("  Tail Chunks (Queue):    ${d.remainingQueueAtKeyUp}")
+                    log("  Time inputFinished:     ${d.timeInputFinishedMs}")
+                    log("  Tail Decode Iters:      ${d.tailDecodeIterations}")
+                    log("════════════════════════════════════════")
+
+                    sessionState = SessionState.IDLE
+                    lastSessionEndTimeMs = SystemClock.elapsedRealtime()
                 }
-
-                tvRecognizedText.text = recognized
-                tvRecognizedText.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-
-                tvMetricLatency.text = "${metrics.postReleaseLatencyMs} ms"
-                tvMetricRtf.text = "%.3f".format(metrics.rtf)
-                tvMetricDuration.text = "${metrics.audioDurationMs} ms"
-                tvMetricTotalTime.text = "${metrics.totalDecodeDurationMs} ms"
-                tvMetricRam.text = "${"%.1f".format(metrics.peakRamMb)} MB"
-                tvMetricCpu.text = "${metrics.cpuTimeMs} ms"
-
-                // M4: Execute Voice Command via CommandRouter
-                if (recognized.isNotEmpty() && !recognized.startsWith("(")) {
-                    val cmdResult = commandRouter.route(recognized)
-                    displayCommandResult(cmdResult)
-                }
-
-                val curPhrase = TestPhrases.items[currentPhraseIndex]
-                log("════════════════════════════════════════")
-                log("РЕЗУЛЬТАТ РАСПОЗНАВАНИЯ:")
-                log("  Ожидалось:   '${curPhrase.phrase}'")
-                log("  Распознано:  '$recognized'")
-                log("  Post-Release Latency: ${metrics.postReleaseLatencyMs} ms")
-                log("  Audio Duration:       ${metrics.audioDurationMs} ms")
-                log("  Decode Duration:      ${metrics.totalDecodeDurationMs} ms")
-                log("  Real-Time Factor:     ${"%.3f".format(metrics.rtf)}")
-                log("  Peak RAM (PSS):       ${"%.1f".format(metrics.peakRamMb)} MB")
-                log("════════════════════════════════════════")
             }
         }
     }
@@ -506,7 +565,7 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-            if (isVoiceActive) {
+            if (sessionState == SessionState.RECORDING) {
                 handleVoiceStop("DPAD_CENTER Release")
                 return true
             }

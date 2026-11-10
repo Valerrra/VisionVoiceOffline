@@ -1,5 +1,21 @@
 package com.huawei.vision.voiceoffline
 
+data class SttDiagnostics(
+    val timeKeyDownMs: Long = 0,
+    val timeKeyUpMs: Long = 0,
+    val timeFirstChunkMs: Long = 0,
+    val timeLastChunkMs: Long = 0,
+    val totalSamplesRead: Long = 0,
+    val totalSamplesFed: Long = 0,
+    val remainingQueueAtKeyUp: Int = 0,
+    val timeInputFinishedMs: Long = 0,
+    val tailDecodeIterations: Int = 0,
+    val rawPartialStt: String = "",
+    val rawFinalStt: String = "",
+    val normalizedCommand: String = "",
+    val chosenIntent: String = ""
+)
+
 data class SttMetrics(
     val audioDurationMs: Long = 0,
     val postReleaseLatencyMs: Long = 0,
@@ -7,7 +23,8 @@ data class SttMetrics(
     val rtf: Float = 0.0f,
     val peakRamMb: Double = 0.0,
     val cpuTimeMs: Long = 0,
-    val finalTranscription: String = ""
+    val finalTranscription: String = "",
+    val diagnostics: SttDiagnostics = SttDiagnostics()
 )
 
 data class TestPhrase(

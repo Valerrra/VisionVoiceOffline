@@ -273,11 +273,8 @@ class CommandRouterTest {
 
     @Test
     fun testDictationModeIsolation() {
-        // Test that in DICTATION mode, even if text contains commands,
-        // it parses as DICTATION_TEXT with NONE action
         val testPhrase = "выключи звук и открой настройки"
         val parsed = CommandParser.parse(testPhrase)
-        // If parsed normally it might be volume or open, but in dictation mode:
         val dictCmd = ParsedCommand(
             type = CommandType.DICTATION_TEXT,
             rawText = testPhrase,
@@ -286,5 +283,83 @@ class CommandRouterTest {
         )
         assertEquals(CommandType.DICTATION_TEXT, dictCmd.type)
         assertEquals("NONE", dictCmd.action)
+    }
+
+    // --- 8. M4.1 Regression Tests: Clipped Words, Rapid Key, Debounce ---
+
+    @Test
+    fun testClippedLastWordsAndStems() {
+        // "открой настрой" -> Settings app launch
+        val cmdSettings = CommandParser.parse("открой настрой")
+        assertEquals(CommandType.OPEN_APP, cmdSettings.type)
+        assertEquals("settings", cmdSettings.target)
+
+        // "кинопои" -> Kinopoisk launch
+        val cmdKinopoisk = CommandParser.parse("кинопои")
+        assertEquals(CommandType.OPEN_APP, cmdKinopoisk.type)
+        assertEquals("kinopoisk", cmdKinopoisk.target)
+
+        // "сделай громч" -> Volume UP
+        val cmdVolUp = CommandParser.parse("сделай громч")
+        assertEquals(CommandType.VOLUME_CONTROL, cmdVolUp.type)
+        assertEquals("UP", cmdVolUp.action)
+
+        // "громч" -> Volume UP
+        val cmdVolUpShort = CommandParser.parse("громч")
+        assertEquals(CommandType.VOLUME_CONTROL, cmdVolUpShort.type)
+        assertEquals("UP", cmdVolUpShort.action)
+
+        // "тиш" -> Volume DOWN
+        val cmdVolDown = CommandParser.parse("тиш")
+        assertEquals(CommandType.VOLUME_CONTROL, cmdVolDown.type)
+        assertEquals("DOWN", cmdVolDown.action)
+    }
+
+    @Test
+    fun testLongDictationPhrasePreservation() {
+        val longPhrase = "завтра в десять утра запланирована рабочая встреча"
+        val parsed = CommandParser.parse(longPhrase)
+        // Ensure rawText is completely intact without truncation
+        assertEquals(longPhrase, parsed.rawText)
+        assertEquals("завтра в десять утра запланирована рабочая встреча", parsed.normalizedText)
+    }
+
+    @Test
+    fun testSttDiagnosticsModelIntegrity() {
+        val diag = SttDiagnostics(
+            timeKeyDownMs = 1000L,
+            timeKeyUpMs = 2500L,
+            timeFirstChunkMs = 1050L,
+            timeLastChunkMs = 2650L,
+            totalSamplesRead = 24000L,
+            totalSamplesFed = 24000L,
+            remainingQueueAtKeyUp = 5,
+            timeInputFinishedMs = 2660L,
+            tailDecodeIterations = 3,
+            rawPartialStt = "открой настрой",
+            rawFinalStt = "открой настройки",
+            normalizedCommand = "открой настройки",
+            chosenIntent = "APP_LAUNCH"
+        )
+
+        assertEquals(1500L, diag.timeKeyUpMs - diag.timeKeyDownMs)
+        assertEquals(diag.totalSamplesRead, diag.totalSamplesFed)
+        assertEquals("открой настройки", diag.rawFinalStt)
+        assertEquals("APP_LAUNCH", diag.chosenIntent)
+
+        val metrics = SttMetrics(
+            audioDurationMs = 1500L,
+            postReleaseLatencyMs = 180L,
+            totalDecodeDurationMs = 450L,
+            rtf = 0.30f,
+            peakRamMb = 112.5,
+            cpuTimeMs = 350L,
+            finalTranscription = diag.rawFinalStt,
+            diagnostics = diag
+        )
+
+        assertEquals(diag.rawFinalStt, metrics.finalTranscription)
+        assertEquals(180L, metrics.postReleaseLatencyMs)
+        assertEquals(diag, metrics.diagnostics)
     }
 }

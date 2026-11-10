@@ -16,6 +16,8 @@ class SttEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "SttEngine"
+        private const val MAX_TAIL_ITERATIONS = 100
+        private const val TAIL_DECODE_DEADLINE_MS = 2500L
     }
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -26,6 +28,7 @@ class SttEngine(private val context: Context) {
     private var utteranceStartTimeMs = 0L
     private var decodeTimeAccumulatorMs = 0L
     private var audioSamplesCount = 0L
+    private var lastPartialText = ""
 
     var isReady = false
         private set
@@ -85,6 +88,7 @@ class SttEngine(private val context: Context) {
             utteranceStartTimeMs = SystemClock.elapsedRealtime()
             decodeTimeAccumulatorMs = 0L
             audioSamplesCount = 0L
+            lastPartialText = ""
             Log.d(TAG, "Utterance stream created")
         }
     }
@@ -106,12 +110,21 @@ class SttEngine(private val context: Context) {
 
             val partialText = rec.getResult(stm).text.trim()
             if (partialText.isNotEmpty()) {
+                lastPartialText = partialText
                 onPartialText?.invoke(partialText)
             }
         }
     }
 
-    fun finishUtterance(keyUpTimeMs: Long, onResult: (SttMetrics) -> Unit) {
+    fun finishUtterance(
+        timeKeyDownMs: Long,
+        timeKeyUpMs: Long,
+        totalSamplesRead: Long,
+        timeFirstChunkMs: Long,
+        timeLastChunkMs: Long,
+        tailChunksCount: Int,
+        onResult: (SttMetrics) -> Unit
+    ) {
         executor.execute {
             val rec = recognizer
             val stm = stream
@@ -120,26 +133,46 @@ class SttEngine(private val context: Context) {
                 return@execute
             }
 
-            isStreaming = false
+            val timeInputFinishedMs = SystemClock.elapsedRealtime()
             stm.inputFinished()
 
-            while (rec.isReady(stm)) {
+            var tailDecodeIterations = 0
+            val tailDeadlineMs = SystemClock.elapsedRealtime() + TAIL_DECODE_DEADLINE_MS
+            while (rec.isReady(stm) && tailDecodeIterations < MAX_TAIL_ITERATIONS && SystemClock.elapsedRealtime() < tailDeadlineMs) {
                 val d0 = SystemClock.elapsedRealtime()
                 rec.decode(stm)
                 decodeTimeAccumulatorMs += (SystemClock.elapsedRealtime() - d0)
+                tailDecodeIterations++
             }
 
             val finalText = rec.getResult(stm).text.trim()
             val finishTimeMs = SystemClock.elapsedRealtime()
+            isStreaming = false
 
             val audioDurationMs = if (audioSamplesCount > 0) (audioSamplesCount * 1000L) / 16000L else 0L
-            val postReleaseLatencyMs = (finishTimeMs - keyUpTimeMs).coerceAtLeast(0)
+            val postReleaseLatencyMs = (finishTimeMs - timeKeyUpMs).coerceAtLeast(0)
             val rtf = if (audioDurationMs > 0) decodeTimeAccumulatorMs.toFloat() / audioDurationMs else 0.0f
 
             val memInfo = Debug.MemoryInfo()
             Debug.getMemoryInfo(memInfo)
             val pssMb = memInfo.totalPss / 1024.0
             val cpuTimeMs = Process.getElapsedCpuTime()
+
+            val diagnostics = SttDiagnostics(
+                timeKeyDownMs = timeKeyDownMs,
+                timeKeyUpMs = timeKeyUpMs,
+                timeFirstChunkMs = timeFirstChunkMs,
+                timeLastChunkMs = timeLastChunkMs,
+                totalSamplesRead = totalSamplesRead,
+                totalSamplesFed = audioSamplesCount,
+                remainingQueueAtKeyUp = tailChunksCount,
+                timeInputFinishedMs = timeInputFinishedMs,
+                tailDecodeIterations = tailDecodeIterations,
+                rawPartialStt = lastPartialText,
+                rawFinalStt = finalText,
+                normalizedCommand = "",
+                chosenIntent = ""
+            )
 
             val metrics = SttMetrics(
                 audioDurationMs = audioDurationMs,
@@ -148,10 +181,14 @@ class SttEngine(private val context: Context) {
                 rtf = rtf,
                 peakRamMb = pssMb,
                 cpuTimeMs = cpuTimeMs,
-                finalTranscription = finalText
+                finalTranscription = finalText,
+                diagnostics = diagnostics
             )
 
-            Log.i(TAG, "Utterance done: '$finalText' | latency=${postReleaseLatencyMs}ms | RTF=$rtf | RAM=${"%.1f".format(pssMb)}MB")
+            Log.i(
+                TAG,
+                "Utterance done: '$finalText' (raw partial: '$lastPartialText') | latency=${postReleaseLatencyMs}ms | tailIterations=$tailDecodeIterations | RTF=$rtf | RAM=${"%.1f".format(pssMb)}MB"
+            )
             onResult(metrics)
         }
     }

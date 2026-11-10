@@ -15,7 +15,6 @@ object AppRegistry {
                 "параметры", "опции", "системные настройки"
             ),
             candidatePackages = listOf(
-                "com.huawei.homevision.settings",
                 "com.android.tv.settings",
                 "com.android.settings"
             ),
@@ -39,7 +38,8 @@ object AppRegistry {
             key = "kinopoisk",
             displayName = "Кинопоиск",
             aliases = listOf(
-                "кинопоиск", "кино поиск", "яндекс кино"
+                "кинопоиск", "кино поиск", "яндекс кино",
+                "кинопои", "кинопоис", "кино"
             ),
             candidatePackages = listOf(
                 "ru.kinopoisk.tv",
