@@ -1,0 +1,73 @@
+name: "Отчет об ошибке (Bug Report)"
+description: "Сообщить о проблеме или ошибке в работе VisionVoiceOffline"
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что помогаете улучшить проект VisionVoiceOffline!
+        Пожалуйста, заполните форму ниже. Не прикладывайте конфиденциальные данные (пароли, личные токены).
+
+  - type: input
+    id: tv_model
+    attributes:
+      label: "Модель телевизора"
+      description: "Например: Huawei Vision S KANT-359 (55\"/65\"/75\") или другая модель Android TV"
+      placeholder: "Huawei Vision S KANT-359"
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: "Версия операционной системы"
+      description: "Версия HarmonyOS или Android TV"
+      placeholder: "HarmonyOS 2.0.0.598 / Android 10 API 29"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: "Версия VisionVoiceOffline"
+      description: "Версия приложения"
+      placeholder: "v0.1.0-beta"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Описание проблемы"
+      description: "Что пошло не так? Какое поведение наблюдается?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: "Шаги для воспроизведения"
+      description: "Пошаговое описание действий"
+      value: |
+        1. Зажать кнопку микрофона на пульте...
+        2. Произнести команду «...»
+        3. Отпустить кнопку
+        4. Наблюдаемое поведение: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: "Ожидаемое поведение"
+      description: "Что должно было произойти согласно вашим ожиданиям"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logcat_snippet
+    attributes:
+      label: "Лог ADB Logcat (при наличии)"
+      description: "Отфильтрованный лог (только теги VisionVoice, без личной информации). Выполните: adb logcat -s VisionVoice:V VoiceOverlay:V CommandRouter:V"
+      render: shell

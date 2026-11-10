@@ -1,0 +1,31 @@
+name: "Предложение функционала (Feature Request)"
+description: "Предложить новую возможность, улучшение или идею для VisionVoiceOffline"
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Благодарим за предложение новых идей для развития проекта!
+
+  - type: textarea
+    id: problem_statement
+    attributes:
+      label: "Какую проблему решает это предложение?"
+      description: "Четкое описание сценария или неудобства, которое вы хотите устранить"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: "Предлагаемое решение"
+      description: "Как именно должен работать новый функционал?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives_considered
+    attributes:
+      label: "Альтернативные варианты"
+      description: "Какие альтернативные подходы или обходные пути вы рассматривали?"

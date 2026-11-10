@@ -1,0 +1,116 @@
+name: "Запрос поддержки приложения (App Support Request)"
+description: "Предложить добавление или адаптацию поискового интегратора для конкретного Android TV приложения"
+title: "[APP SUPPORT]: "
+labels: ["app-support", "search-adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Используйте этот шаблон, если хотите предложить интеграцию голосового поиска для нового приложения 
+        или сообщить о статусе работы установленного приложения.
+        *Примечание:* Пожалуйста, не прикладывайте личные поисковые запросы или неотфильтрованные логи всей системы.
+
+  - type: input
+    id: app_name
+    attributes:
+      label: "Название приложения"
+      description: "Например: Кинопоиск, Lampa, HDRezka, VK Видео, Wink"
+      placeholder: "Кинопоиск"
+    validations:
+      required: true
+
+  - type: input
+    id: package_name
+    attributes:
+      label: "Имя пакета (Package Name)"
+      description: "Точное имя пакета Android (можно узнать через: adb shell pm list packages)"
+      placeholder: "ru.kinopoisk.tv"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: "Версия целевого приложения"
+      description: "Версия установленного на ТВ приложения"
+      placeholder: "2.15.0"
+    validations:
+      required: true
+
+  - type: input
+    id: tv_model
+    attributes:
+      label: "Модель телевизора"
+      description: "Модель устройства"
+      placeholder: "Huawei Vision S KANT-359 (65\")"
+    validations:
+      required: true
+
+  - type: input
+    id: os_version
+    attributes:
+      label: "Версия операционной системы"
+      description: "Версия HarmonyOS или Android TV"
+      placeholder: "HarmonyOS 2.0.0.598 / Android 10 (API 29)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: launch_status
+    attributes:
+      label: "Работает ли голосовой запуск приложения?"
+      description: "Открывается ли приложение по голосовой команде «Открой [Приложение]»?"
+      options:
+        - "Да, открывается штатно"
+        - "Частично (требуется добавить голосовой алиас)"
+        - "Нет, не открывается"
+        - "Не проверялось"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: search_screen_status
+    attributes:
+      label: "Работает ли открытие экрана поиска?"
+      description: "Удается ли открыть интерфейс поиска через Intent или Deep Link?"
+      options:
+        - "Да, открывает экран поиска"
+        - "Нет, открывает только главный экран"
+        - "Приложение аварийно завершается"
+        - "Неизвестно / требуется исследование Intent"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: query_injection_status
+    attributes:
+      label: "Работает ли передача поискового запроса?"
+      description: "Передается ли текст запроса в поисковую строку приложения?"
+      options:
+        - "Да, строка запроса заполняется"
+        - "Нет, поисковая строка остается пустой"
+        - "Неизвестно"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: search_execution_status
+    attributes:
+      label: "Работает ли выполнение поиска?"
+      description: "Отображаются ли результаты поиска автоматически после отправки запроса?"
+      options:
+        - "Да, результаты сразу отображаются"
+        - "Текст вводится, но требуется нажать Ввод на пульте"
+        - "Нет"
+        - "Неизвестно"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: "Способ воспроизведения и известные детали"
+      description: "Опишите, как сейчас реагирует приложение на команды поиска, и приведите известные Deep Link/Intent (если известны из манифеста приложения)"
+      placeholder: "При голосовой команде «Найди в Кинопоиске фильм Интерстеллар»..."
+    validations:
+      required: true

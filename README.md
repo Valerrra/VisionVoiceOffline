@@ -68,9 +68,11 @@ flowchart TD
 ## Документация
 
 - [Руководство по установке (INSTALL_RU.md)](docs/INSTALL_RU.md)
+- [Таблица совместимости и проверенных приложений (TESTED_APPS.md)](docs/TESTED_APPS.md)
+- [Разработка поисковых адаптеров (SEARCH_ADAPTER_DEVELOPMENT.md)](docs/SEARCH_ADAPTER_DEVELOPMENT.md)
 - [Настройка сетевого подключения ADB (ADB_SETUP_RU.md)](docs/ADB_SETUP_RU.md)
-- [Таблица совместимости (COMPATIBILITY.md)](docs/COMPATIBILITY.md)
 - [Решение типичных проблем (TROUBLESHOOTING_RU.md)](docs/TROUBLESHOOTING_RU.md)
+- [Управление сертификатами и подписью (RELEASE_SIGNING_GUIDE.md)](docs/RELEASE_SIGNING_GUIDE.md)
 - [Черновик публикации для 4PDA (4PDA_POST_RU.md)](docs/4PDA_POST_RU.md)
 - [Сторонние компоненты и лицензии (THIRD_PARTY_NOTICES.md)](THIRD_PARTY_NOTICES.md)
 
