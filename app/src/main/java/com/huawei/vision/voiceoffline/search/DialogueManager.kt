@@ -19,12 +19,16 @@ object DialogueManager {
 
     private val POSITIVE_CONFIRMATIONS = listOf(
         "да", "ага", "конечно", "здесь", "в этом приложении", "давай",
-        "ищи здесь", "ищи тут", "тут", "да ищи", "да ищи здесь", "точно"
+        "ищи здесь", "ищи тут", "тут", "да ищи", "да ищи здесь", "точно",
+        "в текущем", "в текущем приложении", "открыть в текущем",
+        "открыть в текущем приложении", "искать в текущем", "в этом", "открой здесь",
+        "открой в ютубе", "открой в youtube", "в ютубе", "на ютубе"
     )
 
     private val NEGATIVE_CONFIRMATIONS = listOf(
         "нет", "не здесь", "не тут", "другое", "в другом приложении",
-        "другое приложение", "не надо здесь", "поменяй", "выбрать другое"
+        "другое приложение", "не надо здесь", "поменяй", "выбрать другое",
+        "в другом", "искать в другом", "ищи в другом", "искать в другом приложении"
     )
 
     private val CANCEL_TRIGGERS = listOf(
@@ -110,7 +114,7 @@ object DialogueManager {
                         dialogueContext.pendingCandidateDisplayName = activeAdapter.displayName
 
                         val prompt = "Искать «$query» в ${activeAdapter.displayName}?"
-                        val options = listOf("Да", "Другое приложение", "Отмена")
+                        val options = listOf("Да (в текущем)", "В другом приложении", "Отмена")
 
                         val session = SearchSession(
                             query = query,
@@ -126,7 +130,7 @@ object DialogueManager {
                         return DialogueResult(
                             handled = true,
                             state = DialogueState.AWAITING_SEARCH_CONFIRMATION,
-                            statusMessage = "$prompt (Скажите: Да, Другое приложение или Отмена)",
+                            statusMessage = "$prompt (Скажите: «Да» / «В текущем» или «В другом приложении»)",
                             promptToUser = prompt,
                             availableOptions = options,
                             isActionComplete = false

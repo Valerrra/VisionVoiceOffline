@@ -125,6 +125,21 @@ class VoiceSearchDialogueTest {
         assertEquals("Доктор Кто", mockYouTube.lastQuery)
     }
 
+    @Test
+    fun testScenario1_ActiveYouTube_ConfirmationCurrentApp() {
+        VisionVoiceAccessibilityService.currentActivePackage = "com.google.android.youtube.tv"
+        val prefs = VoiceOverlayPreferences(dummyContext)
+        prefs.searchPolicy = SearchPolicy.PREFER_ACTIVE
+
+        DialogueManager.startSearchDialogue("Интерстеллар", "Найди Интерстеллар", dummyContext)
+        val confirmRes = DialogueManager.handleInput("В текущем приложении", dummyContext)
+
+        assertEquals(DialogueState.SEARCH_COMPLETED, confirmRes.state)
+        assertTrue(confirmRes.isActionComplete)
+        assertEquals(1, mockYouTube.executeCount)
+        assertEquals("Интерстеллар", mockYouTube.lastQuery)
+    }
+
     // --- Scenario 2: YouTube Active -> "Найди Доктор Кто" -> "Лэйзи Медиа" -> LazyMedia ---
     @Test
     fun testScenario2_ActiveYouTube_SwitchToLazyMedia() {
