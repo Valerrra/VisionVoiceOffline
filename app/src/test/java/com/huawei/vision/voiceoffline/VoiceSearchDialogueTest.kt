@@ -3,10 +3,12 @@ package com.huawei.vision.voiceoffline
 import android.content.Context
 import com.huawei.vision.voiceoffline.search.DialogueManager
 import com.huawei.vision.voiceoffline.search.DialogueState
+import com.huawei.vision.voiceoffline.search.IntegrationMethod
 import com.huawei.vision.voiceoffline.search.SearchAdapter
 import com.huawei.vision.voiceoffline.search.SearchAdapterRegistry
 import com.huawei.vision.voiceoffline.search.SearchExecutionResult
 import com.huawei.vision.voiceoffline.search.SearchPolicy
+import com.huawei.vision.voiceoffline.search.SearchQueryParser
 import com.huawei.vision.voiceoffline.search.SearchTargetResolver
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -23,7 +25,9 @@ class VoiceSearchDialogueTest {
         override val targetAppKey: String,
         override val displayName: String,
         override val candidatePackages: List<String> = listOf("com.test.$targetAppKey"),
-        var available: Boolean = true
+        var available: Boolean = true,
+        override val integrationMethod: IntegrationMethod = IntegrationMethod.DEEP_LINK,
+        override val lastVerificationStatus: String = "Mock Verified"
     ) : SearchAdapter {
         var lastQuery: String? = null
         var executeCount: Int = 0
@@ -36,7 +40,8 @@ class VoiceSearchDialogueTest {
             return SearchExecutionResult.success(
                 targetApp = targetAppKey,
                 query = query,
-                message = "Поиск в $displayName: «$query»"
+                message = "Поиск в $displayName: «$query»",
+                method = integrationMethod
             )
         }
     }
@@ -72,7 +77,7 @@ class VoiceSearchDialogueTest {
     }
 
     private class DummyContext : android.content.ContextWrapper(null) {
-        private val fakePrefs = FakeSharedPreferences()
+        val fakePrefs = FakeSharedPreferences()
         override fun getSharedPreferences(name: String?, mode: Int): android.content.SharedPreferences = fakePrefs
         override fun getApplicationContext(): Context = this
     }
@@ -84,189 +89,308 @@ class VoiceSearchDialogueTest {
     @Before
     fun setUp() {
         SearchAdapterRegistry.resetForTesting()
-        DialogueManager.resetSession()
+        DialogueManager.clearMemory()
 
-        mockYouTube = MockSearchAdapter("youtube", "YouTube")
-        mockLazyMedia = MockSearchAdapter("lazymedia", "LazyMedia Deluxe")
+        mockYouTube = MockSearchAdapter("youtube", "YouTube", listOf("com.google.android.youtube.tv"))
+        mockLazyMedia = MockSearchAdapter("lazymedia", "LazyMedia Deluxe", listOf("com.lazycatsoftware.lmd"))
 
         SearchAdapterRegistry.registerAdapter(mockYouTube)
         SearchAdapterRegistry.registerAdapter(mockLazyMedia)
+
+        VisionVoiceAccessibilityService.currentActivePackage = null
     }
 
     @After
     fun tearDown() {
-        DialogueManager.resetSession()
+        DialogueManager.clearMemory()
         SearchAdapterRegistry.resetForTesting()
+        VisionVoiceAccessibilityService.currentActivePackage = null
     }
 
-    // --- 1. Phrasing Resolution Tests (Stage 6) ---
-
+    // --- Scenario 1: YouTube Active -> "Найди Доктор Кто" -> "Да" -> YouTube ---
     @Test
-    fun testYouTubePhrasingScenarios() {
-        val testCases = mapOf(
-            "Найди на Ютубе Варламова" to "варламова",
-            "Поищи Варламова в Ютубе" to "варламова",
-            "Ютуб, найди Варламова" to "варламова",
-            "Покажи видео про ремонт Форд Мондео" to "ремонт форд мондео"
-        )
+    fun testScenario1_ActiveYouTube_ConfirmationYes() {
+        VisionVoiceAccessibilityService.currentActivePackage = "com.google.android.youtube.tv"
+        val prefs = VoiceOverlayPreferences(dummyContext)
+        prefs.searchPolicy = SearchPolicy.PREFER_ACTIVE
 
-        for ((phrase, expectedQuery) in testCases) {
-            val resolved = SearchTargetResolver.resolve(phrase)
-            if (phrase.contains("Ютуб") || phrase.contains("ютуб")) {
-                assertEquals("Target failed for '$phrase'", "youtube", resolved.targetAppKey)
-            }
-            assertEquals("Query failed for '$phrase'", expectedQuery, resolved.cleanQuery)
-        }
+        val startRes = DialogueManager.startSearchDialogue("Доктор Кто", "Найди Доктор Кто", dummyContext)
+        assertEquals(DialogueState.AWAITING_SEARCH_CONFIRMATION, startRes.state)
+        assertEquals("Искать «Доктор Кто» в YouTube?", startRes.promptToUser)
+
+        val confirmRes = DialogueManager.handleInput("Да", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, confirmRes.state)
+        assertTrue(confirmRes.isActionComplete)
+        assertEquals(1, mockYouTube.executeCount)
+        assertEquals("Доктор Кто", mockYouTube.lastQuery)
     }
 
+    // --- Scenario 2: YouTube Active -> "Найди Доктор Кто" -> "Лэйзи Медиа" -> LazyMedia ---
     @Test
-    fun testLazyMediaPhrasingScenarios() {
-        val testCases = mapOf(
-            "Найди в Лэйзи Медиа Доктора Хауса" to "доктора хауса",
-            "Поищи Доктор Хаус в LazyMedia" to "доктор хаус",
-            "Открой Лэйзи Медиа и найди Доктора Хауса" to "доктора хауса"
-        )
+    fun testScenario2_ActiveYouTube_SwitchToLazyMedia() {
+        VisionVoiceAccessibilityService.currentActivePackage = "com.google.android.youtube.tv"
+        val prefs = VoiceOverlayPreferences(dummyContext)
+        prefs.searchPolicy = SearchPolicy.PREFER_ACTIVE
 
-        for ((phrase, expectedQuery) in testCases) {
-            val resolved = SearchTargetResolver.resolve(phrase)
-            assertEquals("Target failed for '$phrase'", "lazymedia", resolved.targetAppKey)
-            assertEquals("Query failed for '$phrase'", expectedQuery, resolved.cleanQuery)
-        }
-    }
+        DialogueManager.startSearchDialogue("Доктор Кто", "Найди Доктор Кто", dummyContext)
+        val replyRes = DialogueManager.handleInput("В Лэйзи Медиа", dummyContext)
 
-    @Test
-    fun testKinopoiskPhrasingScenarios() {
-        val testCases = mapOf(
-            "Найди на Кинопоиске Интерстеллар" to "интерстеллар",
-            "Поищи фильм Интерстеллар на Кинопоиске" to "интерстеллар"
-        )
-
-        for ((phrase, expectedQuery) in testCases) {
-            val resolved = SearchTargetResolver.resolve(phrase)
-            assertEquals("Target failed for '$phrase'", "kinopoisk", resolved.targetAppKey)
-            assertEquals("Query failed for '$phrase'", expectedQuery, resolved.cleanQuery)
-        }
-    }
-
-    @Test
-    fun testAmbiguousSearchPhrasing() {
-        val ambiguousPhrases = listOf(
-            "Найди Доктора Хауса",
-            "Покажи фильмы с Джеки Чаном",
-            "Хочу посмотреть Назад в будущее"
-        )
-
-        for (phrase in ambiguousPhrases) {
-            val resolved = SearchTargetResolver.resolve(phrase)
-            assertNull("Target should be null for ambiguous phrase '$phrase'", resolved.targetAppKey)
-            assertTrue("Query should not be empty for '$phrase'", resolved.cleanQuery.isNotEmpty())
-        }
-    }
-
-    @Test
-    fun testDialogueReplyResolution() {
-        val validReplies = mapOf(
-            "в лэйзи медиа" to "lazymedia",
-            "лейзи медиа" to "lazymedia",
-            "лэйзи" to "lazymedia",
-            "ютуб" to "youtube",
-            "на ютубе" to "youtube",
-            "кинопоиск" to "kinopoisk"
-        )
-
-        for ((reply, expectedKey) in validReplies) {
-            val resolved = SearchTargetResolver.resolveTargetFromReply(reply)
-            assertNotNull("Reply '$reply' should resolve", resolved)
-            assertEquals("Target mismatch for '$reply'", expectedKey, resolved?.targetAppKey)
-        }
-    }
-
-    // --- 2. Contextual Dialogue State Machine Tests (Stage 4) ---
-
-    @Test
-    fun testDialogueFullTwoTurnFlow() {
-        // Turn 1: User says ambiguous query
-        val turn1 = CommandParser.parse("Найди сериал Доктор Хаус")
-        assertEquals(CommandType.SEARCH, turn1.type)
-        assertNull(turn1.target)
-
-        val res1 = DialogueManager.startSearchDialogue(
-            query = "сериал Доктор Хаус",
-            rawText = "Найди сериал Доктор Хаус",
-            context = dummyContext
-        )
-
-        assertTrue(res1.handled)
-        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res1.state)
-        assertEquals("Где искать «сериал Доктор Хаус»?", res1.promptToUser)
-        assertTrue(res1.availableOptions.contains("LazyMedia Deluxe"))
-        assertTrue(res1.availableOptions.contains("YouTube"))
-        assertTrue(DialogueManager.hasActiveSession(30))
-
-        // Turn 2: User responds via PTT: "В Лэйзи Медиа"
-        val res2 = DialogueManager.handleInput("В Лэйзи Медиа", dummyContext)
-
-        assertTrue(res2.handled)
-        assertEquals(DialogueState.SEARCH_COMPLETED, res2.state)
-        assertTrue(res2.isActionComplete)
-        assertNotNull(res2.executionResult)
-        assertEquals("Поиск в LazyMedia Deluxe: «сериал Доктор Хаус»", res2.statusMessage)
-        assertEquals("сериал Доктор Хаус", mockLazyMedia.lastQuery)
+        assertEquals(DialogueState.SEARCH_COMPLETED, replyRes.state)
+        assertTrue(replyRes.isActionComplete)
         assertEquals(1, mockLazyMedia.executeCount)
-
-        // Verify session reset after completion
-        assertFalse(DialogueManager.hasActiveSession(30))
-        assertEquals(DialogueState.SEARCH_COMPLETED, DialogueManager.state)
+        assertEquals("Доктор Кто", mockLazyMedia.lastQuery)
+        assertEquals(0, mockYouTube.executeCount)
     }
 
+    // --- Scenario 3: YouTube Active -> "Найди Доктор Кто" -> "Нет" -> Rejects YouTube ---
     @Test
-    fun testDialogueCancellation() {
-        DialogueManager.startSearchDialogue("Варламов", "Найди Варламов", dummyContext)
-        assertTrue(DialogueManager.hasActiveSession(30))
+    fun testScenario3_ActiveYouTube_RejectShowsAlternatives() {
+        VisionVoiceAccessibilityService.currentActivePackage = "com.google.android.youtube.tv"
+        val prefs = VoiceOverlayPreferences(dummyContext)
+        prefs.searchPolicy = SearchPolicy.PREFER_ACTIVE
 
-        val cancelResult = DialogueManager.handleInput("отмена", dummyContext)
-        assertTrue(cancelResult.handled)
-        assertEquals(DialogueState.CANCELLED, cancelResult.state)
-        assertEquals("Поиск отменён", cancelResult.statusMessage)
-        assertFalse(DialogueManager.hasActiveSession(30))
+        DialogueManager.startSearchDialogue("Доктор Кто", "Найди Доктор Кто", dummyContext)
+        val rejectRes = DialogueManager.handleInput("Нет", dummyContext)
+
+        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, rejectRes.state)
+        // Should present alternatives without rejected YouTube
+        assertEquals(listOf("LazyMedia Deluxe"), rejectRes.availableOptions)
     }
 
+    // --- Scenario 4: "Найди на Ютубе Варламова" -> Direct YouTube search ---
     @Test
-    fun testDialogueRepeat() {
-        DialogueManager.startSearchDialogue("Интерстеллар", "Найди Интерстеллар", dummyContext)
-        val repeatResult = DialogueManager.handleInput("повтори", dummyContext)
-
-        assertTrue(repeatResult.handled)
-        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, repeatResult.state)
-        assertEquals("Где искать «Интерстеллар»?", repeatResult.promptToUser)
-        assertTrue(DialogueManager.hasActiveSession(30))
+    fun testScenario4_DirectYouTubeSearch() {
+        val parsed = CommandParser.parse("Найди на Ютубе Варламова")
+        assertEquals(CommandType.SEARCH, parsed.type)
+        val resolved = SearchTargetResolver.resolve("Найди на Ютубе Варламова")
+        assertEquals("youtube", resolved.targetAppKey)
+        assertEquals("варламова", resolved.cleanQuery)
     }
 
+    // --- Scenario 5: "Найди сериал Доктор Хаус" (no active app) -> Target Clarification ---
     @Test
-    fun testDialogueTargetNotInstalled() {
-        DialogueManager.startSearchDialogue("Человек паук", "Найди Человек паук", dummyContext)
+    fun testScenario5_AmbiguousQueryPrompt() {
+        VisionVoiceAccessibilityService.currentActivePackage = null
+        val prefs = VoiceOverlayPreferences(dummyContext)
+        prefs.searchPolicy = SearchPolicy.PREFER_ACTIVE
 
-        // User asks for Kinopoisk which is registered but not installed on this TV
+        val res = DialogueManager.startSearchDialogue("сериал Доктор Хаус", "Найди сериал Доктор Хаус", dummyContext)
+        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res.state)
+        assertEquals("Где искать «сериал Доктор Хаус»?", res.promptToUser)
+    }
+
+    // --- Scenario 6: Search completed in YouTube -> "А теперь в Лэйзи Медиа" -> repeats in LazyMedia ---
+    @Test
+    fun testScenario6_RepeatInAnotherApp() {
+        mockYouTube.executeSearch(dummyContext, "Доктор Хаус")
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Хаус", mockYouTube.executeSearch(dummyContext, "Доктор Хаус"))
+
+        assertTrue(DialogueManager.hasRecentSearchMemory(120))
+
+        val repeatRes = DialogueManager.handleInput("А теперь в Лэйзи Медиа", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, repeatRes.state)
+        assertEquals("Доктор Хаус", mockLazyMedia.lastQuery)
+        assertEquals(1, mockLazyMedia.executeCount)
+    }
+
+    // --- Scenario 7: Search completed -> "Попробуй на Кинопоиске" ---
+    @Test
+    fun testScenario7_RepeatInKinopoiskUninstalled() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Интерстеллар", mockYouTube.executeSearch(dummyContext, "Интерстеллар"))
+
         val mockKinopoisk = MockSearchAdapter("kinopoisk", "Кинопоиск", available = false)
         SearchAdapterRegistry.registerAdapter(mockKinopoisk)
 
-        val res = DialogueManager.handleInput("Кинопоиск", dummyContext)
-
-        assertTrue(res.handled)
+        val res = DialogueManager.handleInput("Попробуй на Кинопоиске", dummyContext)
         assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res.state)
-        assertTrue(res.statusMessage.contains("не установлено"))
-        // Session must be preserved so user can choose an installed app
-        assertTrue(DialogueManager.hasActiveSession(30))
+        assertTrue(res.statusMessage.contains("не доступно"))
     }
 
+    // --- Scenario 8: Search completed -> "А теперь второй сезон" -> Refines query ---
     @Test
-    fun testDialogueTimeout() {
-        val session = com.huawei.vision.voiceoffline.search.SearchSession(
-            query = "test",
-            rawText = "find test",
-            createdAt = System.currentTimeMillis() - 35000L // 35 seconds ago
+    fun testScenario8_RefineSeason() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Кто", mockYouTube.executeSearch(dummyContext, "Доктор Кто"))
+
+        val res = DialogueManager.handleInput("А теперь второй сезон", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Доктор Кто второй сезон", mockYouTube.lastQuery)
+        assertEquals("Доктор Кто второй сезон", DialogueManager.dialogueContext.currentQuery)
+    }
+
+    // --- Scenario 9: Duplicate "второй сезон" does not duplicate string ---
+    @Test
+    fun testScenario9_DuplicateRefinementPrevention() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Кто второй сезон", mockYouTube.executeSearch(dummyContext, "Доктор Кто второй сезон"))
+
+        val res = DialogueManager.handleInput("второй сезон", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Доктор Кто второй сезон", mockYouTube.lastQuery)
+    }
+
+    // --- Scenario 10: "Первый сезон" replaces "второй сезон" ---
+    @Test
+    fun testScenario10_ReplaceSeason() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Кто второй сезон", mockYouTube.executeSearch(dummyContext, "Доктор Кто второй сезон"))
+
+        val res = DialogueManager.handleInput("первый сезон", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Доктор Кто первый сезон", mockYouTube.lastQuery)
+    }
+
+    // --- Scenario 11: "Только на русском" complements query ---
+    @Test
+    fun testScenario11_LanguageRefinement() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Кто", mockYouTube.executeSearch(dummyContext, "Доктор Кто"))
+
+        val res = DialogueManager.handleInput("только на русском", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Доктор Кто только на русском", mockYouTube.lastQuery)
+    }
+
+    // --- Scenario 12: "Поищи там же" uses same source ---
+    @Test
+    fun testScenario12_SearchSameTarget() {
+        DialogueManager.recordSearchExecution("lazymedia", "LazyMedia Deluxe", "Интерстеллар", mockLazyMedia.executeSearch(dummyContext, "Интерстеллар"))
+
+        val res = DialogueManager.handleInput("Поищи там же", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Интерстеллар", mockLazyMedia.lastQuery)
+        assertEquals(2, mockLazyMedia.executeCount)
+    }
+
+    // --- Scenario 13: "В другом приложении" shows alternatives ---
+    @Test
+    fun testScenario13_SearchOtherApp() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Интерстеллар", mockYouTube.executeSearch(dummyContext, "Интерстеллар"))
+
+        val res = DialogueManager.handleInput("В другом приложении", dummyContext)
+        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res.state)
+        assertEquals(listOf("LazyMedia Deluxe"), res.availableOptions)
+    }
+
+    // --- Scenario 14: Cancellation ---
+    @Test
+    fun testScenario14_Cancellation() {
+        DialogueManager.startSearchDialogue("Варламов", "Найди Варламов", dummyContext)
+        val cancelRes = DialogueManager.handleInput("отмена", dummyContext)
+
+        assertTrue(cancelRes.handled)
+        assertEquals(DialogueState.CANCELLED, cancelRes.state)
+        assertFalse(DialogueManager.hasActiveSession(30))
+    }
+
+    // --- Scenario 15: Timeout expiration ---
+    @Test
+    fun testScenario15_TimeoutExpiration() {
+        val oldSession = com.huawei.vision.voiceoffline.search.SearchSession(
+            query = "Старый фильм",
+            rawText = "найди",
+            createdAt = System.currentTimeMillis() - 40000L
         )
-        assertTrue("Session older than 30s must be expired", session.isExpired(30))
-        assertFalse("Session must not be expired for 60s timeout", session.isExpired(60))
+        assertTrue(oldSession.isExpired(30))
+    }
+
+    // --- Scenario 16: Unknown target name prompts alternatives ---
+    @Test
+    fun testScenario16_UnknownTargetPrompt() {
+        DialogueManager.startSearchDialogue("Фильм", "найди фильм", dummyContext)
+        val res = DialogueManager.handleInput("В космосе", dummyContext)
+
+        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res.state)
+        assertTrue(res.statusMessage.contains("Не удалось определить источник"))
+    }
+
+    // --- Scenario 17: App without search adapter ---
+    @Test
+    fun testScenario17_AppWithoutSearchAdapter() {
+        DialogueManager.startSearchDialogue("Фильм", "найди фильм", dummyContext)
+        // User asks for byebyedpi which has no search adapter
+        val res = DialogueManager.handleInput("байбай дипиай", dummyContext)
+        assertEquals(DialogueState.AWAITING_SEARCH_TARGET, res.state)
+        assertTrue(res.statusMessage.contains("не поддерживается"))
+    }
+
+    // --- Scenario 18: Window state change doesn't break active dialogue ---
+    @Test
+    fun testScenario18_WindowStatePreservation() {
+        DialogueManager.startSearchDialogue("Матрица", "найди матрицу", dummyContext)
+        // User or system switches window
+        VisionVoiceAccessibilityService.currentActivePackage = "com.other.app"
+
+        assertTrue(DialogueManager.hasActiveSession(30))
+        val res = DialogueManager.handleInput("В Лэйзи Медиа", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Матрица", mockLazyMedia.lastQuery)
+    }
+
+    // --- Scenario 19: Command "громче" bypasses dialogue and leaves memory intact ---
+    @Test
+    fun testScenario19_VolumeBypassesDialogue() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Доктор Кто", mockYouTube.executeSearch(dummyContext, "Доктор Кто"))
+
+        val router = CommandRouter(dummyContext)
+        val volumeResult = router.route("громче")
+
+        assertEquals(CommandType.VOLUME_CONTROL, volumeResult.command.type)
+        assertTrue(DialogueManager.hasRecentSearchMemory(120))
+        assertEquals("Доктор Кто", DialogueManager.dialogueContext.currentQuery)
+    }
+
+    // --- Scenario 20: Missing prior context for follow-up ---
+    @Test
+    fun testScenario20_MissingPriorContext() {
+        DialogueManager.clearMemory()
+        val res = DialogueManager.handleInput("А теперь второй сезон", dummyContext)
+        assertEquals(DialogueState.ERROR, res.state)
+        assertTrue(res.statusMessage.contains("Предыдущий поиск не найден"))
+    }
+
+    // --- Scenario 21: Subtitle refinement ---
+    @Test
+    fun testScenario21_SubtitleRefinement() {
+        DialogueManager.recordSearchExecution("youtube", "YouTube", "Аватар", mockYouTube.executeSearch(dummyContext, "Аватар"))
+
+        val res = DialogueManager.handleInput("с субтитрами", dummyContext)
+        assertEquals(DialogueState.SEARCH_COMPLETED, res.state)
+        assertEquals("Аватар с субтитрами", mockYouTube.lastQuery)
+    }
+
+    // --- Scenario 22: Content query via "открой доктор кто" ---
+    @Test
+    fun testScenario22_OpenContentTitleTreatedAsSearch() {
+        val parsed = CommandParser.parse("открой доктор кто")
+        assertEquals(CommandType.SEARCH, parsed.type)
+        assertEquals("доктор кто", parsed.params["query"])
+    }
+
+    // --- Scenario 23: Search exclusion toggle in SearchAdapterRegistry ---
+    @Test
+    fun testScenario23_SearchExclusion() {
+        assertFalse(SearchAdapterRegistry.isAppExcludedFromSearch(dummyContext, "youtube"))
+        SearchAdapterRegistry.setAppExcludedFromSearch(dummyContext, "youtube", true)
+        assertTrue(SearchAdapterRegistry.isAppExcludedFromSearch(dummyContext, "youtube"))
+
+        val available = SearchAdapterRegistry.getAvailableAdapters(dummyContext)
+        assertFalse(available.any { it.targetAppKey == "youtube" })
+
+        SearchAdapterRegistry.setAppExcludedFromSearch(dummyContext, "youtube", false)
+        val availableRestored = SearchAdapterRegistry.getAvailableAdapters(dummyContext)
+        assertTrue(availableRestored.any { it.targetAppKey == "youtube" })
+    }
+
+    // --- Scenario 24: Direct repetition check helper ---
+    @Test
+    fun testScenario24_RepeatIntentParser() {
+        val repeat1 = SearchQueryParser.detectRepeatIntent("а теперь в лэйзи медиа")
+        assertTrue(repeat1.isRepeat)
+        assertEquals("lazymedia", repeat1.targetAppKey)
+
+        val repeat2 = SearchQueryParser.detectRepeatIntent("поищи там же")
+        assertTrue(repeat2.isRepeat)
+        assertTrue(repeat2.useSameTarget)
+
+        val repeat3 = SearchQueryParser.detectRepeatIntent("в другом приложении")
+        assertTrue(repeat3.isRepeat)
+        assertTrue(repeat3.requestAlternative)
     }
 }

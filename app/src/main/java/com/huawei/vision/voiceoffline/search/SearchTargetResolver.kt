@@ -24,7 +24,8 @@ object SearchTargetResolver {
                 "в ньюпайпе", "в newpipe"
             ),
             directNames = listOf(
-                "ютуб", "youtube", "ютюб", "ютуп", "smarttube", "смарттьюб", "ньюпайп", "newpipe"
+                "ютуб", "youtube", "ютюб", "ютуп", "smarttube", "смарттьюб", "ньюпайп", "newpipe",
+                "ютубе", "ютюбе", "смарттьюбе", "ньюпайпе"
             )
         ),
         TargetPattern(
@@ -53,7 +54,7 @@ object SearchTargetResolver {
                 "на кинопоиск", "в кинопоиск", "на яндекс кино"
             ),
             directNames = listOf(
-                "кинопоиск", "кино поиск", "яндекс кино"
+                "кинопоиск", "кино поиск", "яндекс кино", "кинопоиске"
             )
         ),
         TargetPattern(
@@ -251,6 +252,11 @@ object SearchTargetResolver {
             matchedAlias = null,
             isExplicitTarget = false
         )
+    }
+
+    fun getDisplayName(appKey: String): String? {
+        return TARGET_PATTERNS.firstOrNull { it.appKey == appKey }?.displayName
+            ?: AppRegistry.getApp(appKey)?.appLabel
     }
 
     private fun cleanQuery(text: String): String {

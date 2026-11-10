@@ -91,6 +91,18 @@
             android:text="Алиасы: лэйзи медиа, лейзе, лэйзи, lazy media"
             android:textColor="@color/brand_cyan"
             android:textSize="13sp" />
+
+        <!-- Search Support Badge & Details -->
+        <TextView
+            android:id="@+id/tvAppSearchSupport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="🔍 Поиск: Поддерживается (Deep Link)"
+            android:textColor="@color/brand_cyan"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <!-- Action Prompt Hint -->

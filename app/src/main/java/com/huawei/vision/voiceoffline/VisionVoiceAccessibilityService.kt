@@ -16,10 +16,18 @@ class VisionVoiceAccessibilityService : AccessibilityService() {
         private var instance: VisionVoiceAccessibilityService? = null
 
         @Volatile
+        var currentActivePackage: String? = null
+            internal set
+
+        @Volatile
         private var testActionHandler: ((Int) -> Boolean)? = null
 
         val isRunning: Boolean
             get() = instance != null || testActionHandler != null
+
+        fun getActivePackage(context: Context): String? {
+            return currentActivePackage ?: VoiceOverlayPreferences(context).lastActivePackage
+        }
 
         fun isServiceEnabled(context: Context): Boolean {
             if (isRunning) return true
@@ -90,7 +98,17 @@ class VisionVoiceAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Strictly empty / NO-OP: do NOT inspect or process screen content, text, or windows
+        // Safe foreground package tracking for contextual search (no screen/window content inspection)
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (!pkg.isNullOrEmpty() && pkg != packageName) {
+                currentActivePackage = pkg
+                try {
+                    VoiceOverlayPreferences(applicationContext).lastActivePackage = pkg
+                } catch (_: Exception) {
+                }
+            }
+        }
     }
 
     override fun onInterrupt() {
