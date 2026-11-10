@@ -148,24 +148,37 @@ class VoiceOverlayWindowManager(private val context: Context) {
 
             currentState = VoiceOverlayState.RESULT
 
+            val isDialogue = cmdResult.executedAction == "DIALOGUE_AWAITING_TARGET" ||
+                    cmdResult.executedAction == "DIALOGUE_PROMPT" ||
+                    cmdResult.executedAction == "SEARCH_TARGET_NOT_INSTALLED"
+
             val isSuccess = cmdResult.success
-            tvOverlayStateBadge?.text = if (isSuccess) "ВЫПОЛНЕНО" else "ОТКЛОНЕНО"
-            tvOverlayStateBadge?.setTextColor(
-                ContextCompat.getColor(context, if (isSuccess) R.color.accent_green else R.color.accent_red)
-            )
+            if (isDialogue) {
+                tvOverlayStateBadge?.text = "ДИАЛОГ"
+                tvOverlayStateBadge?.setTextColor(ContextCompat.getColor(context, R.color.brand_cyan))
+            } else {
+                tvOverlayStateBadge?.text = if (isSuccess) "ВЫПОЛНЕНО" else "ОТКЛОНЕНО"
+                tvOverlayStateBadge?.setTextColor(
+                    ContextCompat.getColor(context, if (isSuccess) R.color.accent_green else R.color.accent_red)
+                )
+            }
 
             tvOverlayStt?.text = if (rawStt.isNotEmpty()) rawStt else "(Речь не распознана)"
             layoutOverlayResult?.visibility = View.VISIBLE
             tvOverlayIntentBadge?.text = "${cmdResult.command.type}:"
             tvOverlayResultText?.text = cmdResult.statusMessage
             tvOverlayResultText?.setTextColor(
-                ContextCompat.getColor(context, if (isSuccess) R.color.text_primary else R.color.accent_red)
+                ContextCompat.getColor(context, if (isSuccess || isDialogue) R.color.text_primary else R.color.accent_red)
             )
 
             overlayView?.visibility = View.VISIBLE
             Log.d(TAG, "Overlay state: RESULT ('$rawStt' -> ${cmdResult.statusMessage})")
 
-            val hideDelayMs = (preferences.overlayDurationSec * 1000L).coerceIn(1000L, 10000L)
+            val hideDelayMs = if (isDialogue) {
+                (preferences.dialogueTimeoutSeconds * 1000L).coerceIn(10000L, 60000L)
+            } else {
+                (preferences.overlayDurationSec * 1000L).coerceIn(1000L, 10000L)
+            }
             mainHandler.postDelayed(autoHideRunnable, hideDelayMs)
         }
     }

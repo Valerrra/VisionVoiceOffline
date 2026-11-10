@@ -373,15 +373,7 @@ class CommandExecutor(private val context: Context) {
     }
 
     private fun executeSearch(cmd: ParsedCommand): CommandResult {
-        val query = (cmd.params["query"] as? String) ?: cmd.rawText
-        val searchType = (cmd.params["searchType"] as? String) ?: "general"
-
-        return CommandResult(
-            command = cmd,
-            success = true,
-            statusMessage = "Поисковый запрос структурирован: '$query' [тип: $searchType]",
-            executedAction = "STRUCTURED_SEARCH_INTENT"
-        )
+        return com.huawei.vision.voiceoffline.search.SearchCoordinator.processSearchCommand(cmd, context)
     }
 
     private fun executeNavigation(cmd: ParsedCommand): CommandResult {

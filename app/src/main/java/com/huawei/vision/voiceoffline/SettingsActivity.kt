@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.huawei.vision.voiceoffline.search.SearchPolicy
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -35,6 +36,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var tvA11yStatus: TextView
     private lateinit var btnOpenA11ySettings: Button
+
+    private lateinit var tvSearchPolicyDesc: TextView
+    private lateinit var btnSearchPolicyCycle: Button
+    private lateinit var btnDialogueTimeoutCycle: Button
 
     private lateinit var btnNavMyApps: Button
     private lateinit var btnNavHistory: Button
@@ -78,6 +83,18 @@ class SettingsActivity : AppCompatActivity() {
         btnNavHistory = findViewById(R.id.btnNavHistory)
         btnNavDiagnostic = findViewById(R.id.btnNavDiagnostic)
         btnBackFromSettings = findViewById(R.id.btnBackFromSettings)
+
+        tvSearchPolicyDesc = findViewById(R.id.tvSearchPolicyDesc)
+        btnSearchPolicyCycle = findViewById(R.id.btnSearchPolicyCycle)
+        btnDialogueTimeoutCycle = findViewById(R.id.btnDialogueTimeoutCycle)
+
+        btnSearchPolicyCycle.setOnClickListener {
+            cycleSearchPolicy()
+        }
+
+        btnDialogueTimeoutCycle.setOnClickListener {
+            cycleDialogueTimeout()
+        }
 
         btnToggleMode.setOnClickListener {
             val newMode = if (prefs.operatingMode == OperatingMode.COMMAND) {
@@ -190,6 +207,8 @@ class SettingsActivity : AppCompatActivity() {
         updateDurationView()
         updateAutostartView()
         updateA11yViews()
+        updateSearchPolicyViews()
+        updateDialogueTimeoutViews()
     }
 
     private fun updateModeViews() {
@@ -257,5 +276,51 @@ class SettingsActivity : AppCompatActivity() {
             tvA11yStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_red))
             btnOpenA11ySettings.text = "Включить в настройках"
         }
+    }
+
+    private fun cycleSearchPolicy() {
+        val current = prefs.searchPolicy
+        val next = when (current) {
+            SearchPolicy.ASK_ALWAYS -> SearchPolicy.PREFER_ACTIVE
+            SearchPolicy.PREFER_ACTIVE -> SearchPolicy.DEFAULT_APP
+            SearchPolicy.DEFAULT_APP -> SearchPolicy.ASK_ALWAYS
+        }
+        prefs.searchPolicy = next
+        updateSearchPolicyViews()
+        Toast.makeText(this, "Политика поиска изменена", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateSearchPolicyViews() {
+        when (prefs.searchPolicy) {
+            SearchPolicy.ASK_ALWAYS -> {
+                btnSearchPolicyCycle.text = "Уточнять всегда"
+                tvSearchPolicyDesc.text = "При неоднозначном запросе всегда спрашивать пользователя «Где искать?»"
+            }
+            SearchPolicy.PREFER_ACTIVE -> {
+                btnSearchPolicyCycle.text = "Активное приложение"
+                tvSearchPolicyDesc.text = "Сначала искать в текущем открытом приложении, если оно поддерживает поиск"
+            }
+            SearchPolicy.DEFAULT_APP -> {
+                btnSearchPolicyCycle.text = "По умолчанию"
+                tvSearchPolicyDesc.text = "Автоматически искать в источнике по умолчанию (LazyMedia Deluxe)"
+            }
+        }
+    }
+
+    private fun cycleDialogueTimeout() {
+        val current = prefs.dialogueTimeoutSeconds
+        val next = when (current) {
+            15 -> 30
+            30 -> 45
+            45 -> 60
+            else -> 15
+        }
+        prefs.dialogueTimeoutSeconds = next
+        updateDialogueTimeoutViews()
+        Toast.makeText(this, "Таймаут диалога: $next сек.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateDialogueTimeoutViews() {
+        btnDialogueTimeoutCycle.text = "${prefs.dialogueTimeoutSeconds} секунд"
     }
 }

@@ -36,9 +36,10 @@ object CommandParser {
     )
 
     private val SEARCH_PREFIXES = listOf(
-        "найди в интернете", "найди мне", "найди", "найдите",
+        "найди в интернете", "найди мне пожалуйста", "найди мне", "найдите пожалуйста", "найдите", "найди",
+        "поищи в интернете", "поищи мне пожалуйста", "поищи мне", "поищи пожалуйста", "поищи", "поищите",
         "поиск в интернете", "поиск",
-        "ищи", "ищите",
+        "ищи мне", "ищи", "ищите",
         "покажи мне", "покажи", "покажите",
         "гугл", "яндекс"
     )
@@ -449,17 +450,66 @@ object CommandParser {
     }
 
     private fun parseSearchCommand(rawText: String, norm: String): ParsedCommand? {
-        // Explicit search prefix: "найди ...", "поиск ...", etc.
+        val resolved = com.huawei.vision.voiceoffline.search.SearchTargetResolver.resolve(norm)
+
+        // 1. Compound search: "открой [app] и найди [query]" / "запусти [app] и найди [query]"
+        if (norm.startsWith("открой ") || norm.startsWith("запусти ")) {
+            if (norm.contains(" и найди ") || norm.contains(" и поищи ") ||
+                norm.contains(" и включи ") || norm.contains(" и покажи ")) {
+                return ParsedCommand(
+                    type = CommandType.SEARCH,
+                    rawText = rawText,
+                    normalizedText = norm,
+                    action = "SEARCH",
+                    target = resolved.targetAppKey,
+                    params = mapOf(
+                        "query" to resolved.cleanQuery,
+                        "targetAppKey" to resolved.targetAppKey,
+                        "targetDisplayName" to resolved.targetDisplayName,
+                        "searchType" to "compound_search"
+                    ),
+                    confidence = 1.0f,
+                    matchedRule = "compound_app_search"
+                )
+            }
+        }
+
+        // 2. Direct target prefix + search: "[app] найди [query]"
+        if (resolved.isExplicitTarget && resolved.cleanQuery.isNotEmpty()) {
+            return ParsedCommand(
+                type = CommandType.SEARCH,
+                rawText = rawText,
+                normalizedText = norm,
+                action = "SEARCH",
+                target = resolved.targetAppKey,
+                params = mapOf(
+                    "query" to resolved.cleanQuery,
+                    "targetAppKey" to resolved.targetAppKey,
+                    "targetDisplayName" to resolved.targetDisplayName,
+                    "searchType" to "explicit_target_search"
+                ),
+                confidence = 1.0f,
+                matchedRule = "target_directed_search"
+            )
+        }
+
+        // 3. Explicit search prefix: "найди ...", "поищи ...", "поиск ...", etc.
         for (prefix in SEARCH_PREFIXES) {
             if (norm.startsWith("$prefix ")) {
-                val query = norm.substring(prefix.length).trim()
+                val query = if (resolved.cleanQuery.isNotEmpty()) resolved.cleanQuery else norm.substring(prefix.length).trim()
                 if (query.isNotEmpty()) {
                     return ParsedCommand(
                         type = CommandType.SEARCH,
                         rawText = rawText,
                         normalizedText = norm,
                         action = "SEARCH",
-                        params = mapOf("query" to query, "searchType" to "explicit_search"),
+                        target = resolved.targetAppKey,
+                        params = mapOf(
+                            "query" to query,
+                            "targetAppKey" to resolved.targetAppKey,
+                            "targetDisplayName" to resolved.targetDisplayName,
+                            "searchType" to "explicit_search"
+                        ),
                         confidence = 1.0f,
                         matchedRule = "prefixed_search"
                     )
@@ -467,10 +517,13 @@ object CommandParser {
             }
         }
 
-        // Topical queries: "фильмы с ...", "сериал ...", "прогноз погоды ...", "включи музыку ..."
+        // 4. Topical queries: "сериал ...", "фильмы с ...", "покажи видео про ...", "хочу посмотреть ..."
         val topicalPrefixes = listOf(
             "фильмы с", "фильмы про", "фильмы", "фильм", "сериал", "кино",
-            "прогноз погоды", "погода", "что такое", "кто такой", "музыка",
+            "прогноз погоды", "погода", "что такое", "кто такой",
+            "видео про", "видео о", "видео",
+            "хочу посмотреть фильм", "хочу посмотреть сериал", "хочу посмотреть",
+            "смотреть фильм", "смотреть сериал", "смотреть",
             "включи классическую музыку", "включи музыку", "включи песню", "включи трек"
         )
         for (tp in topicalPrefixes) {
@@ -480,7 +533,13 @@ object CommandParser {
                     rawText = rawText,
                     normalizedText = norm,
                     action = "SEARCH",
-                    params = mapOf("query" to norm, "searchType" to "topical_query"),
+                    target = resolved.targetAppKey,
+                    params = mapOf(
+                        "query" to resolved.cleanQuery,
+                        "targetAppKey" to resolved.targetAppKey,
+                        "targetDisplayName" to resolved.targetDisplayName,
+                        "searchType" to "topical_query"
+                    ),
                     confidence = 0.9f,
                     matchedRule = "topical_search"
                 )
