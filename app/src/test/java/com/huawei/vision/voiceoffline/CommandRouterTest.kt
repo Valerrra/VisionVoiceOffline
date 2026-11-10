@@ -567,4 +567,91 @@ class CommandRouterTest {
             assertEquals("Failed target for '$phrase'", "lazymedia", cmd.target)
         }
     }
+
+    // --- 7. M4.7 Navigation & Accessibility Tests ---
+
+    @Test
+    fun testHomeNavigationVariants() {
+        val phrases = listOf(
+            "домой",
+            "на главный экран",
+            "главный экран",
+            "на главную",
+            "рабочий стол",
+            "выйти в меню",
+            "главное меню"
+        )
+        for (phrase in phrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.SYSTEM_NAV, cmd.type)
+            assertEquals("Failed action for '$phrase'", "HOME", cmd.action)
+        }
+    }
+
+    @Test
+    fun testRecentsNavigationVariants() {
+        val phrases = listOf(
+            "недавние",
+            "недавние приложения",
+            "последние приложения",
+            "диспетчер задач",
+            "список задач",
+            "запущенные приложения",
+            "открытые приложения",
+            "переключатель приложений",
+            "recents"
+        )
+        for (phrase in phrases) {
+            val cmd = CommandParser.parse(phrase)
+            assertEquals("Failed for '$phrase'", CommandType.SYSTEM_NAV, cmd.type)
+            assertEquals("Failed action for '$phrase'", "RECENTS", cmd.action)
+        }
+    }
+
+    @Test
+    fun testAccessibilityServiceUnavailableFailsGracefully() {
+        VisionVoiceAccessibilityService.setTestActionHandler(null)
+        assertFalse("Service must report not running", VisionVoiceAccessibilityService.isRunning)
+        assertFalse("performHome must return false when service is null", VisionVoiceAccessibilityService.performHome())
+        assertFalse("performBack must return false when service is null", VisionVoiceAccessibilityService.performBack())
+        assertFalse("performRecents must return false when service is null", VisionVoiceAccessibilityService.performRecents())
+    }
+
+    @Test
+    fun testAccessibilityServiceAvailableExecutesGlobalActions() {
+        var lastAction = -1
+        VisionVoiceAccessibilityService.setTestActionHandler { action ->
+            lastAction = action
+            true
+        }
+        try {
+            assertTrue("Service must report running", VisionVoiceAccessibilityService.isRunning)
+
+            val homeRes = VisionVoiceAccessibilityService.performHome()
+            assertTrue("performHome must succeed", homeRes)
+            assertEquals(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME, lastAction)
+
+            val backRes = VisionVoiceAccessibilityService.performBack()
+            assertTrue("performBack must succeed", backRes)
+            assertEquals(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK, lastAction)
+
+            val recentsRes = VisionVoiceAccessibilityService.performRecents()
+            assertTrue("performRecents must succeed", recentsRes)
+            assertEquals(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS, lastAction)
+        } finally {
+            VisionVoiceAccessibilityService.setTestActionHandler(null)
+        }
+    }
+
+    @Test
+    fun testAccessibilityServiceReportsFailureWhenActionFails() {
+        VisionVoiceAccessibilityService.setTestActionHandler { false }
+        try {
+            assertFalse("performHome must return false on action failure", VisionVoiceAccessibilityService.performHome())
+            assertFalse("performBack must return false on action failure", VisionVoiceAccessibilityService.performBack())
+            assertFalse("performRecents must return false on action failure", VisionVoiceAccessibilityService.performRecents())
+        } finally {
+            VisionVoiceAccessibilityService.setTestActionHandler(null)
+        }
+    }
 }

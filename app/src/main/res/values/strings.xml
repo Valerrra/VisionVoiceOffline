@@ -1,3 +1,5 @@
 <resources>
-    <string name="app_name">VisionVoice STT</string>
+    <string name="app_name">VisionVoiceOffline</string>
+    <string name="accessibility_service_label">VisionVoice — Навигация</string>
+    <string name="accessibility_service_description">Служба выполнения команд «Домой», «Назад» и «Недавние» по голосовому запросу. Не собирает данные экрана и не перехватывает ввод.</string>
 </resources>

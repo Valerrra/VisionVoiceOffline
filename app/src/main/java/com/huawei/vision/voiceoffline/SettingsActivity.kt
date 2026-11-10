@@ -1,5 +1,6 @@
 package com.huawei.vision.voiceoffline
 
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -31,6 +32,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var btnDurationCycle: Button
     private lateinit var btnToggleAutostart: Button
+
+    private lateinit var tvA11yStatus: TextView
+    private lateinit var btnOpenA11ySettings: Button
 
     private lateinit var btnNavMyApps: Button
     private lateinit var btnNavHistory: Button
@@ -66,6 +70,9 @@ class SettingsActivity : AppCompatActivity() {
 
         btnDurationCycle = findViewById(R.id.btnDurationCycle)
         btnToggleAutostart = findViewById(R.id.btnToggleAutostart)
+
+        tvA11yStatus = findViewById(R.id.tvA11yStatus)
+        btnOpenA11ySettings = findViewById(R.id.btnOpenA11ySettings)
 
         btnNavMyApps = findViewById(R.id.btnNavMyApps)
         btnNavHistory = findViewById(R.id.btnNavHistory)
@@ -123,6 +130,10 @@ class SettingsActivity : AppCompatActivity() {
             updateAutostartView()
         }
 
+        btnOpenA11ySettings.setOnClickListener {
+            openAccessibilitySettings()
+        }
+
         btnNavMyApps.setOnClickListener {
             startActivity(Intent(this, AppsActivity::class.java))
         }
@@ -142,12 +153,43 @@ class SettingsActivity : AppCompatActivity() {
         btnToggleMode.requestFocus()
     }
 
+    private fun openAccessibilitySettings() {
+        val intents = listOf(
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS),
+            Intent().apply {
+                component = ComponentName(
+                    "com.huawei.homevision.settings",
+                    "com.huawei.homevision.settings.homepage.SettingsMainActivity"
+                )
+            }
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                Toast.makeText(
+                    this,
+                    "Открыты настройки ТВ. Перейдите в «Специальные возможности» -> VisionVoice",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            } catch (_: Exception) {}
+        }
+        Toast.makeText(
+            this,
+            "Откройте Настройки с пульта: Система -> Специальные возможности -> VisionVoice",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     private fun updateAllViews() {
         updateModeViews()
         updateServiceViews()
         updateOverlayPermViews()
         updateDurationView()
         updateAutostartView()
+        updateA11yViews()
     }
 
     private fun updateModeViews() {
@@ -196,5 +238,24 @@ class SettingsActivity : AppCompatActivity() {
         btnToggleAutostart.setTextColor(
             ContextCompat.getColor(this, if (isAutostart) R.color.brand_cyan else R.color.text_secondary)
         )
+    }
+
+    private fun updateA11yViews() {
+        val isA11yActive = VisionVoiceAccessibilityService.isRunning
+        val isEnabledInSystem = VisionVoiceAccessibilityService.isServiceEnabled(this)
+
+        if (isA11yActive) {
+            tvA11yStatus.text = "Статус: ✓ АКТИВНА (ВКЛЮЧЕНА)"
+            tvA11yStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            btnOpenA11ySettings.text = "Настройки ТВ"
+        } else if (isEnabledInSystem) {
+            tvA11yStatus.text = "Статус: ПОДКЛЮЧЕНИЕ..."
+            tvA11yStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_yellow))
+            btnOpenA11ySettings.text = "Открыть настройки ТВ"
+        } else {
+            tvA11yStatus.text = "Статус: ВЫКЛЮЧЕНА (ТРЕБУЕТСЯ ВКЛЮЧИТЬ)"
+            tvA11yStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_red))
+            btnOpenA11ySettings.text = "Включить в настройках"
+        }
     }
 }

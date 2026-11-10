@@ -248,6 +248,31 @@ class CommandExecutor(private val context: Context) {
     }
 
     private fun navigateToHomeOrMinimize(cmd: ParsedCommand, isMinimize: Boolean): CommandResult {
+        // 1. If AccessibilityService is active, perform system GLOBAL_ACTION_HOME
+        if (VisionVoiceAccessibilityService.isRunning) {
+            val success = VisionVoiceAccessibilityService.performHome()
+            if (success) {
+                return CommandResult(
+                    command = cmd,
+                    success = true,
+                    statusMessage = if (isMinimize) "Приложение свёрнуто (Главный экран)" else "Переход на главный экран телевизора",
+                    executedAction = "GLOBAL_ACTION_HOME"
+                )
+            }
+        }
+
+        // 2. If running inside an Activity context, attempt moveTaskToBack for minimize
+        if (isMinimize && context is android.app.Activity) {
+            context.moveTaskToBack(true)
+            return CommandResult(
+                command = cmd,
+                success = true,
+                statusMessage = "Приложение свёрнуто в фон (moveTaskToBack)",
+                executedAction = "MOVE_TASK_TO_BACK"
+            )
+        }
+
+        // 3. Fallback: Check if ordinary ACTION_MAIN + CATEGORY_HOME works without special permissions
         try {
             val homeIntent = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
@@ -261,37 +286,19 @@ class CommandExecutor(private val context: Context) {
                 executedAction = if (isMinimize) "MINIMIZE_TO_HOME" else "GO_HOME"
             )
         } catch (e: SecurityException) {
-            Log.w(TAG, "Direct CATEGORY_HOME restricted on Huawei HarmonyOS: ${e.message}")
-            if (context is android.app.Activity) {
-                context.moveTaskToBack(true)
-                return CommandResult(
-                    command = cmd,
-                    success = true,
-                    statusMessage = "Приложение свёрнуто в фон (moveTaskToBack)",
-                    executedAction = "MOVE_TASK_TO_BACK"
-                )
-            }
-            val launchIntent = context.packageManager.getLaunchIntentForPackage("com.huawei.homevision.launcher")
-            if (launchIntent != null) {
-                try {
-                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(launchIntent)
-                    return CommandResult(
-                        command = cmd,
-                        success = true,
-                        statusMessage = "Главный экран телевизора",
-                        executedAction = "START_LAUNCHER_PACKAGE"
-                    )
-                } catch (_: Exception) {}
-            }
-            return CommandResult(
-                command = cmd,
-                success = false,
-                statusMessage = "Переход на главный экран ограничен политикой Huawei HarmonyOS (требуется ABILITY_FOR_HIVOICE). Нажмите кнопку Домой на пульте.",
-                executedAction = "RESTRICTED_HOME_NAV",
-                error = "SECURITY_RESTRICTION_HIVOICE"
-            )
+            Log.w(TAG, "Direct CATEGORY_HOME denied: requires huawei.android.permission.ABILITY_FOR_HIVOICE")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error launching standard HOME intent", e)
         }
+
+        // 4. Return clear user-friendly status explaining AccessibilityService requirement per M4.7 spec
+        return CommandResult(
+            command = cmd,
+            success = false,
+            statusMessage = "Для перехода «Домой» включите службу навигации: Настройки -> Специальные возможности -> VisionVoice",
+            executedAction = "REQUIRES_ACCESSIBILITY",
+            error = "ACCESSIBILITY_SERVICE_NOT_ENABLED"
+        )
     }
 
     private fun executeVolume(cmd: ParsedCommand): CommandResult {
@@ -381,14 +388,52 @@ class CommandExecutor(private val context: Context) {
         return when (cmd.action) {
             "HOME" -> navigateToHomeOrMinimize(cmd, isMinimize = false)
             "BACK" -> {
+                if (VisionVoiceAccessibilityService.isRunning) {
+                    val success = VisionVoiceAccessibilityService.performBack()
+                    if (success) {
+                        return CommandResult(
+                            command = cmd,
+                            success = true,
+                            statusMessage = "Навигация назад (Back)",
+                            executedAction = "GLOBAL_ACTION_BACK"
+                        )
+                    }
+                }
                 if (context is android.app.Activity) {
                     context.runOnUiThread { context.onBackPressed() }
+                    return CommandResult(
+                        command = cmd,
+                        success = true,
+                        statusMessage = "Навигация назад (Back)",
+                        executedAction = "ACTIVITY_ON_BACK_PRESSED"
+                    )
                 }
                 CommandResult(
                     command = cmd,
-                    success = true,
-                    statusMessage = "Навигация назад (Back)",
-                    executedAction = "NAV_BACK"
+                    success = false,
+                    statusMessage = "Для навигации «Назад» включите службу навигации: Настройки -> Специальные возможности -> VisionVoice",
+                    executedAction = "REQUIRES_ACCESSIBILITY",
+                    error = "ACCESSIBILITY_SERVICE_NOT_ENABLED"
+                )
+            }
+            "RECENTS" -> {
+                if (VisionVoiceAccessibilityService.isRunning) {
+                    val success = VisionVoiceAccessibilityService.performRecents()
+                    if (success) {
+                        return CommandResult(
+                            command = cmd,
+                            success = true,
+                            statusMessage = "Список запущенных приложений (Recents)",
+                            executedAction = "GLOBAL_ACTION_RECENTS"
+                        )
+                    }
+                }
+                CommandResult(
+                    command = cmd,
+                    success = false,
+                    statusMessage = "Для вызова недавних приложений включите службу навигации: Настройки -> Специальные возможности -> VisionVoice",
+                    executedAction = "REQUIRES_ACCESSIBILITY",
+                    error = "ACCESSIBILITY_SERVICE_NOT_ENABLED"
                 )
             }
             else -> CommandResult(

@@ -347,6 +347,22 @@ object CommandParser {
             )
         }
 
+        val recentsTriggers = listOf(
+            "недавние", "недавние приложения", "последние приложения",
+            "диспетчер задач", "список задач", "запущенные приложения",
+            "открытые приложения", "переключатель приложений", "recents"
+        )
+        if (recentsTriggers.any { norm == it }) {
+            return ParsedCommand(
+                type = CommandType.SYSTEM_NAV,
+                rawText = rawText,
+                normalizedText = norm,
+                action = "RECENTS",
+                confidence = 1.0f,
+                matchedRule = "nav_recents"
+            )
+        }
+
         return null
     }
 

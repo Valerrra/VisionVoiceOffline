@@ -329,6 +329,80 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- Category: Служба навигации (Специальные возможности) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="СЛУЖБА НАВИГАЦИИ (ДОМОЙ, НАЗАД, НЕДАВНИЕ)"
+                android:textColor="@color/brand_cyan"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp"
+                android:background="@drawable/bg_hero_card"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Служба специальных возможностей"
+                            android:textColor="@color/text_primary"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvA11yStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="Статус: ВЫКЛЮЧЕНА (ТРЕБУЕТСЯ ВКЛЮЧИТЬ)"
+                            android:textColor="@color/accent_yellow"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnOpenA11ySettings"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_action_btn_selector"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="20dp"
+                        android:text="Открыть настройки ТВ"
+                        android:textColor="@color/brand_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvA11yGuide"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="Инструкция для голосовых команд «Домой», «Назад» и «Недавние»:\n1. Нажмите кнопку «Открыть настройки ТВ» выше.\n2. В системных настройках перейдите в: «Система» (или «Основные») ⟶ «Специальные возможности» (Accessibility).\n3. Найдите службу «VisionVoice — Навигация» и переведите переключатель в положение ВКЛ.\n\nКонфиденциальность: служба выполняет исключительно нажатия системных кнопок навигации по вашему голосовому запросу. Чтение экрана, текста и паролей отключено на уровне системы."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
             <!-- Category: Дополнительно и Диагностика -->
             <TextView
                 android:layout_width="wrap_content"
