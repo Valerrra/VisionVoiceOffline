@@ -404,6 +404,116 @@
             </LinearLayout>
 
             <!-- Category: Дополнительно и Диагностика -->
+            <!-- Section Header: Search Settings (M5) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="УНИВЕРСАЛЬНЫЙ ГОЛОСОВОЙ ПОИСК"
+                android:textColor="@color/brand_cyan"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <!-- Card: Search Policy & Dialogue -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:background="@drawable/card_bg"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Политика выбора источника поиска"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSearchPolicyDesc"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Уточнять источник всегда при отсутствии явного указания"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnSearchPolicyCycle"
+                        android:layout_width="220dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_action_btn_selector"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:text="Уточнять всегда"
+                        android:textColor="@color/brand_cyan"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="16dp"
+                    android:background="@color/card_border" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Таймаут контекстного диалога"
+                            android:textColor="@color/text_primary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Время ожидания второй реплики через PTT (микрофон выключен)"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btnDialogueTimeoutCycle"
+                        android:layout_width="220dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_action_btn_selector"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:text="30 секунд"
+                        android:textColor="@color/brand_cyan"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

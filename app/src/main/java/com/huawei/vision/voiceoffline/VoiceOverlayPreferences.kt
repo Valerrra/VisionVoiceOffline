@@ -2,6 +2,7 @@ package com.huawei.vision.voiceoffline
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.huawei.vision.voiceoffline.search.SearchPolicy
 
 class VoiceOverlayPreferences(context: Context) {
 
@@ -12,6 +13,10 @@ class VoiceOverlayPreferences(context: Context) {
         private const val KEY_HISTORY_ENABLED = "history_logging_enabled"
         private const val KEY_OVERLAY_DURATION_SEC = "overlay_display_duration_sec"
         private const val KEY_OPERATING_MODE = "operating_mode"
+        private const val KEY_SEARCH_POLICY = "search_source_policy"
+        private const val KEY_DIALOGUE_TIMEOUT_SEC = "dialogue_timeout_sec"
+        private const val KEY_DEFAULT_SEARCH_APP = "default_search_app"
+        private const val KEY_LAST_ACTIVE_PKG = "last_active_package"
     }
 
     private val prefs: SharedPreferences =
@@ -43,4 +48,27 @@ class VoiceOverlayPreferences(context: Context) {
             }
         }
         set(value) = prefs.edit().putString(KEY_OPERATING_MODE, value.name).apply()
+
+    var searchPolicy: SearchPolicy
+        get() {
+            val name = prefs.getString(KEY_SEARCH_POLICY, SearchPolicy.ASK_ALWAYS.name)
+            return try {
+                SearchPolicy.valueOf(name ?: SearchPolicy.ASK_ALWAYS.name)
+            } catch (_: Exception) {
+                SearchPolicy.ASK_ALWAYS
+            }
+        }
+        set(value) = prefs.edit().putString(KEY_SEARCH_POLICY, value.name).apply()
+
+    var dialogueTimeoutSeconds: Int
+        get() = prefs.getInt(KEY_DIALOGUE_TIMEOUT_SEC, 30)
+        set(value) = prefs.edit().putInt(KEY_DIALOGUE_TIMEOUT_SEC, value.coerceIn(10, 120)).apply()
+
+    var defaultSearchApp: String
+        get() = prefs.getString(KEY_DEFAULT_SEARCH_APP, "lazymedia") ?: "lazymedia"
+        set(value) = prefs.edit().putString(KEY_DEFAULT_SEARCH_APP, value).apply()
+
+    var lastActivePackage: String?
+        get() = prefs.getString(KEY_LAST_ACTIVE_PKG, null)
+        set(value) = prefs.edit().putString(KEY_LAST_ACTIVE_PKG, value).apply()
 }

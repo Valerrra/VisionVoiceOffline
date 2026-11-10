@@ -2,6 +2,8 @@ package com.huawei.vision.voiceoffline
 
 import android.content.Context
 import android.util.Log
+import com.huawei.vision.voiceoffline.search.DialogueManager
+import com.huawei.vision.voiceoffline.search.SearchCoordinator
 
 class CommandRouter(private val context: Context) {
 
@@ -39,6 +41,16 @@ class CommandRouter(private val context: Context) {
             )
         }
 
+        // 1. Check if DialogueManager has an active dialogue session awaiting target
+        if (DialogueManager.hasActiveSession(prefs.dialogueTimeoutSeconds)) {
+            val dialogueRes = SearchCoordinator.handleDialogueInput(rawText, context)
+            if (dialogueRes != null) {
+                Log.i(TAG, "DialogueManager resolved input: '${dialogueRes.statusMessage}'")
+                return dialogueRes
+            }
+        }
+
+        // 2. Parse and execute standard command
         val parsed = parser.parse(rawText)
         Log.i(TAG, "Parsed: type=${parsed.type}, action=${parsed.action}, target=${parsed.target}, rule=${parsed.matchedRule}")
         return executor.execute(parsed)
